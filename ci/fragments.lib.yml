@@ -100,6 +100,11 @@ config:
   image_resource: #@ ci_orchestrator_image_config()
   inputs:
   - name: repo
+  #@ if checkout_sha_file:
+  #@   # checkout_sha_file is something like "spec/build_sha"; the
+  #@   # input dir is the first path component, so depend on it.
+  - name: #@ checkout_sha_file.split("/")[0]
+  #@ end
   outputs:
   - name: image
   params:
