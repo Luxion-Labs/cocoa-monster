@@ -36,13 +36,13 @@ jobs:
       image_resource: #@ ci_orchestrator_image_config()
       inputs: [{ name: repo }]
       run:
-        path: sh
-        args:
-          - -exc
-          - |
-            set -euo pipefail
-            cd repo
-            ci-run check-code nix flake check
+        #! ci-run is the wrapper itself — it rsyncs `repo` from the
+        #! task root onto the nix worker, runs the command there, and
+        #! relays exit status. Calling it as `path` (not via sh)
+        #! keeps the cwd at the task root, matching what ci-run's
+        #! rsync expects.
+        path: ci-run
+        args: [check-code, nix, flake, check]
 
   - #@ nix_build_image_task("build-image")
   - #@ write_edge_tags_task()

@@ -84,9 +84,15 @@ config:
 #! image) gunzips and copies it into ./image/image.tar where the
 #! Concourse registry-image resource expects to find it.
 #!
+#! Stays at the task root (does NOT `cd repo`) — ci-run rsyncs the
+#! `repo` input directory by name from the task root to the worker,
+#! so cd-ing in first makes the rsync see "repo/repo" and fail.
+#!
 #! checkout_sha is optional — the ci job leaves it empty so nix runs
 #! against repo HEAD; promote-release passes a sha to pin the rebuild
-#! to the exact commit prod actually shipped from.
+#! to the exact commit prod actually shipped from. The checkout
+#! happens BEFORE ci-run dispatches so the worker rsyncs the pinned
+#! state.
 #@ def nix_build_image_task(task_name="build-image", checkout_sha_file=""):
 task: #@ task_name
 config:
@@ -104,22 +110,21 @@ config:
       - -exc
       - |
         set -euo pipefail
-        cd repo
         if [ -n "$CHECKOUT_SHA_FILE" ]; then
-          target_sha="$(cat "../$CHECKOUT_SHA_FILE")"
-          if ! git rev-parse --verify "$target_sha^{commit}" >/dev/null 2>&1; then
+          target_sha="$(cat "$CHECKOUT_SHA_FILE")"
+          if ! git -C repo rev-parse --verify "$target_sha^{commit}" >/dev/null 2>&1; then
             echo "FATAL: target sha $target_sha not in repo input" >&2
             exit 1
           fi
-          git checkout "$target_sha"
+          git -C repo checkout "$target_sha"
         fi
         ci-run build-image nix build .#docker-image -o result
         # Belt-and-braces: ci-run's post-hook is supposed to place
         # image/image.tar; if a future ci-orchestrator change drops
         # that behavior, fall back to a manual gunzip so the put
         # downstream still finds the file.
-        if [ ! -f ../image/image.tar ]; then
-          gunzip -c "$(readlink -f result)" > ../image/image.tar
+        if [ ! -f image/image.tar ]; then
+          gunzip -c "$(readlink -f result)" > image/image.tar
         fi
 #@ end
 
