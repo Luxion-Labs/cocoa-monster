@@ -5,7 +5,7 @@ git_branch: main
 github_private_key: ((github.private_key))
 github_api_token: ((github.api_token))
 
-deployments_git_uri: git@github.com:sandipndev/deployments.git
+deployments_git_uri: git@github.com:Luxion-Labs/deployments.git
 deployments_git_branch: main
 deployments_private_key: ((deployments-push.ssh_key))
 

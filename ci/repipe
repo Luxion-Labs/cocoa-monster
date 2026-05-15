@@ -8,7 +8,7 @@ if [[ $(which ytt) == "" ]]; then
 fi
 
 target="${FLY_TARGET:-sandipndev}"
-team=main
+team=luxion-labs
 pipeline=cocoa-monster
 
 TMPDIR=""
