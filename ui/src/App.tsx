@@ -3,7 +3,7 @@ const App = () => (
     <h1>cocoa.monster</h1>
     <p>Privacy-first prediction markets on Midnight. Sweet name, sharp odds.</p>
     <footer style={{ marginTop: "3rem", fontSize: "0.875rem", opacity: 0.6 }}>
-      Markets are sweet, proofs are private. — coming soon.
+      Markets are sweet, proofs are private. coming soon.
     </footer>
   </main>
 );
