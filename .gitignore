@@ -27,3 +27,8 @@ result
 # Local data
 midnight-level-db/
 .overmind.sock
+
+# Cypress artifacts
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/

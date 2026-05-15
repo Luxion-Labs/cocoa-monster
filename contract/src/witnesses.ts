@@ -1,4 +1,4 @@
-import { Ledger } from "./managed/cocoa/contract/index.cjs";
+import { Ledger } from "./managed/cocoa/contract/index.js";
 import { WitnessContext } from "@midnight-ntwrk/compact-runtime";
 
 export type CocoaPrivateState = {

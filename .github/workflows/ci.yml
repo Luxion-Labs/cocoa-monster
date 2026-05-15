@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Single sequential job. The cypress step needs the bundle from
+  # the build step, so splitting jobs would only buy us a redundant
+  # nix store rehydration. Earlier failures fail-fast (default shell
+  # semantics) and skip the rest, so the first root cause still
+  # surfaces fast.
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
+      - uses: ./.github/actions/setup-compact
+
+      - name: nix flake check
+        run: nix flake check
+
+      - name: install
+        run: npm ci --legacy-peer-deps
+
+      - name: compact
+        run: nix run .#compact
+
+      - name: typecheck
+        run: nix run .#typecheck
+
+      - name: build
+        run: nix run .#build
+
+      - name: cypress
+        run: nix run .#cypress

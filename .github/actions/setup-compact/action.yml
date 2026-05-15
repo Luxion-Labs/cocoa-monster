@@ -1,0 +1,23 @@
+name: "setup-compact"
+
+description: "Install the Midnight Compact compiler if not already on PATH."
+
+runs:
+  using: "composite"
+  steps:
+    - id: check
+      shell: bash
+      run: |
+        if command -v compact >/dev/null; then
+          echo "already-installed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "already-installed=false" >> "$GITHUB_OUTPUT"
+        fi
+    - if: steps.check.outputs.already-installed == 'false'
+      shell: bash
+      run: |
+        curl --proto '=https' --tlsv1.2 -LsSf \
+          https://github.com/midnightntwrk/compact/releases/download/compact-v0.2.0/compact-installer.sh | sh
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+    - shell: bash
+      run: compact update

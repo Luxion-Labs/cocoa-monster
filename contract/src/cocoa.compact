@@ -1,4 +1,4 @@
-pragma language_version >= 0.16 && <= 0.17;
+pragma language_version >= 0.20;
 
 import CompactStandardLibrary;
 
@@ -10,7 +10,7 @@ export ledger question: Opaque<"string">;
 export ledger closeTime: Uint<64>;
 export ledger disputeWindow: Uint<64>;
 
-// CPMM reserves (in $NIGHT minor units). Price of YES = reserveNo / (reserveYes + reserveNo).
+// CPMM reserves. YES probability = reserveNo / (reserveYes + reserveNo).
 export ledger reserveYes: Uint<128>;
 export ledger reserveNo: Uint<128>;
 
@@ -30,11 +30,11 @@ constructor(
   closeTimestamp: Uint<64>,
   disputeSeconds: Uint<64>,
 ) {
-  question = q;
-  reserveYes = initialLiquidity;
-  reserveNo = initialLiquidity;
-  closeTime = closeTimestamp;
-  disputeWindow = disputeSeconds;
+  question = disclose(q);
+  reserveYes = disclose(initialLiquidity);
+  reserveNo = disclose(initialLiquidity);
+  closeTime = disclose(closeTimestamp);
+  disputeWindow = disclose(disputeSeconds);
   status = Status.OPEN;
 }
 
@@ -46,21 +46,26 @@ witness positionNonce(): Bytes<32>;
 
 // Buy `amountOut` outcome shares of `side` for `collateralIn` collateral.
 // `amountOut` is computed off-chain from the CPMM invariant against the
-// public reserves; this circuit just shifts the reserves accordingly and
-// records an opaque position commitment. Amounts and reserves are public,
-// but the buyer's identity (which commitment is theirs) is not.
+// public reserves. Trade size has to be public — the AMM updates on-chain
+// reserves by these amounts — but the buyer's identity stays hidden because
+// the position commitment mixes their secret + nonce into the hash.
 export circuit buy(side: Side, collateralIn: Uint<128>, amountOut: Uint<128>): Bytes<32> {
   assert(status == Status.OPEN, "market not open");
-  if (side == Side.YES) {
-    assert(reserveYes > amountOut, "insufficient YES liquidity");
-    reserveYes = disclose(reserveYes - amountOut);
-    reserveNo = disclose(reserveNo + collateralIn);
+  const publicSide = disclose(side);
+  const publicAmount = disclose(amountOut);
+  const publicCollateral = disclose(collateralIn);
+  if (publicSide == Side.YES) {
+    assert(reserveYes > publicAmount, "insufficient YES liquidity");
+    reserveYes = reserveYes - publicAmount;
+    reserveNo = (reserveNo + publicCollateral) as Uint<128>;
   } else {
-    assert(reserveNo > amountOut, "insufficient NO liquidity");
-    reserveNo = disclose(reserveNo - amountOut);
-    reserveYes = disclose(reserveYes + collateralIn);
+    assert(reserveNo > publicAmount, "insufficient NO liquidity");
+    reserveNo = reserveNo - publicAmount;
+    reserveYes = (reserveYes + publicCollateral) as Uint<128>;
   }
-  const c = disclose(commitment(side, amountOut));
+  const sk = localSecretKey();
+  const nonce = positionNonce();
+  const c = disclose(commitment(sk, nonce, publicSide, publicAmount));
   positions.insert(c);
   return c;
 }
@@ -70,56 +75,65 @@ export circuit buy(side: Side, collateralIn: Uint<128>, amountOut: Uint<128>): B
 // After `closeTime`, anyone may propose an outcome. Starts the dispute window.
 export circuit proposeOutcome(side: Side, nowTs: Uint<64>): [] {
   assert(status == Status.OPEN, "market not open");
-  assert(nowTs >= closeTime, "market still open");
+  const publicNow = disclose(nowTs);
+  assert(publicNow >= closeTime, "market still open");
   proposedOutcome = disclose(side);
-  proposedAt = disclose(nowTs);
+  proposedAt = publicNow;
   status = Status.PROPOSED;
 }
 
 // Settle the market once the dispute window has elapsed.
 export circuit settle(nowTs: Uint<64>): [] {
   assert(status == Status.PROPOSED, "no proposal pending");
-  assert(nowTs >= proposedAt + disputeWindow, "dispute window open");
+  const publicNow = disclose(nowTs);
+  // Timestamps don't approach Uint<64>::MAX in any reachable future, so the
+  // narrow cast on `proposedAt + disputeWindow` is safe.
+  const settleAt = (proposedAt + disputeWindow) as Uint<64>;
+  assert(publicNow >= settleAt, "dispute window open");
   outcome = proposedOutcome;
   status = Status.RESOLVED;
 }
 
-// Privately redeem a winning position. Reveals only the nullifier.
+// Privately redeem a winning position. The user proves ownership of an
+// existing commitment without revealing their identity (no per-user
+// indexing on the chain), then publishes a one-shot nullifier so they
+// can't redeem the same position twice.
 export circuit redeem(side: Side, amountOut: Uint<128>): Uint<128> {
   assert(status == Status.RESOLVED, "market not resolved");
-  assert(outcome == side, "wrong side");
-  const n = disclose(nullifier(side, amountOut));
+  const publicSide = disclose(side);
+  const publicAmount = disclose(amountOut);
+  assert(outcome == publicSide, "wrong side");
+  const sk = localSecretKey();
+  const nonce = positionNonce();
+  const c = disclose(commitment(sk, nonce, publicSide, publicAmount));
+  assert(positions.member(c), "no such position");
+  const n = disclose(nullifier(sk, nonce, publicSide, publicAmount));
   assert(!nullifiers.member(n), "already redeemed");
   nullifiers.insert(n);
-  return disclose(amountOut);
+  return publicAmount;
 }
 
 // ----------------- Helpers -----------------
+// Internal — take sk + nonce as parameters so callers stay in charge of
+// when witness values get hashed and disclosed (mirrors the bboard
+// publicKey pattern).
 
-export circuit commitment(side: Side, amount: Uint<128>): Bytes<32> {
+circuit commitment(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128>): Bytes<32> {
   return persistentHash<Vector<5, Bytes<32>>>([
     pad(32, "cocoa:pos:"),
-    localSecretKey(),
-    positionNonce(),
+    sk,
+    nonce,
     amount as Field as Bytes<32>,
-    sideTag(side),
+    side as Field as Bytes<32>,
   ]);
 }
 
-export circuit nullifier(side: Side, amount: Uint<128>): Bytes<32> {
+circuit nullifier(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128>): Bytes<32> {
   return persistentHash<Vector<5, Bytes<32>>>([
     pad(32, "cocoa:null:"),
-    localSecretKey(),
-    positionNonce(),
+    sk,
+    nonce,
     amount as Field as Bytes<32>,
-    sideTag(side),
+    side as Field as Bytes<32>,
   ]);
-}
-
-export circuit sideTag(side: Side): Bytes<32> {
-  if (side == Side.YES) {
-    return pad(32, "cocoa:yes");
-  } else {
-    return pad(32, "cocoa:no");
-  }
 }

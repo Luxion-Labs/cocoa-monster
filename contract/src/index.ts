@@ -1,2 +1,2 @@
-export * from "./managed/cocoa/contract/index.cjs";
+export * from "./managed/cocoa/contract/index.js";
 export * from "./witnesses";
