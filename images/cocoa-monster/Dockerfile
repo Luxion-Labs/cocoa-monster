@@ -4,7 +4,7 @@
 FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
+ && apt-get install -y --no-install-recommends curl ca-certificates xz-utils \
  && rm -rf /var/lib/apt/lists/*
 RUN curl --proto '=https' --tlsv1.2 -LsSf \
       https://github.com/midnightntwrk/compact/releases/download/compact-v0.2.0/compact-installer.sh | sh
