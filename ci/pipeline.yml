@@ -328,7 +328,7 @@ resources:
 - name: github-release
   type: github-release
   source:
-    owner: sandipndev
+    owner: Luxion-Labs
     repository: #@ data.values.registry_image
     access_token: #@ data.values.github_api_token
     #! Default (release: true, pre_release: false) — `put` marks the
@@ -340,7 +340,7 @@ resources:
 - name: github-prerelease
   type: github-release
   source:
-    owner: sandipndev
+    owner: Luxion-Labs
     repository: #@ data.values.registry_image
     access_token: #@ data.values.github_api_token
     pre_release: true

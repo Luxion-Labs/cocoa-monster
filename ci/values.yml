@@ -1,6 +1,6 @@
 #@data/values
 ---
-git_uri: git@github.com:sandipndev/cocoa-monster.git
+git_uri: git@github.com:Luxion-Labs/cocoa-monster.git
 git_branch: main
 github_private_key: ((github.private_key))
 github_api_token: ((github.api_token))
