@@ -1,0 +1,29 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+.vite/
+
+# Compact build output
+managed/
+
+# Nix / direnv
+.direnv/
+result
+
+# Environment
+.env
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+
+# Local data
+midnight-level-db/
+.overmind.sock

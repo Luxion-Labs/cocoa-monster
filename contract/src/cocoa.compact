@@ -1,0 +1,125 @@
+pragma language_version >= 0.16 && <= 0.17;
+
+import CompactStandardLibrary;
+
+export enum Side { YES, NO }
+export enum Status { OPEN, PROPOSED, RESOLVED }
+
+// ----------------- Public market state -----------------
+export ledger question: Opaque<"string">;
+export ledger closeTime: Uint<64>;
+export ledger disputeWindow: Uint<64>;
+
+// CPMM reserves (in $NIGHT minor units). Price of YES = reserveNo / (reserveYes + reserveNo).
+export ledger reserveYes: Uint<128>;
+export ledger reserveNo: Uint<128>;
+
+// Optimistic oracle.
+export ledger status: Status;
+export ledger outcome: Side;
+export ledger proposedOutcome: Side;
+export ledger proposedAt: Uint<64>;
+
+// Privacy: anonymous position commitments and one-shot redemption nullifiers.
+export ledger positions: Set<Bytes<32>>;
+export ledger nullifiers: Set<Bytes<32>>;
+
+constructor(
+  q: Opaque<"string">,
+  initialLiquidity: Uint<128>,
+  closeTimestamp: Uint<64>,
+  disputeSeconds: Uint<64>,
+) {
+  question = q;
+  reserveYes = initialLiquidity;
+  reserveNo = initialLiquidity;
+  closeTime = closeTimestamp;
+  disputeWindow = disputeSeconds;
+  status = Status.OPEN;
+}
+
+// ----------------- Witnesses (private) -----------------
+witness localSecretKey(): Bytes<32>;
+witness positionNonce(): Bytes<32>;
+
+// ----------------- Trading -----------------
+
+// Buy `amountOut` outcome shares of `side` for `collateralIn` collateral.
+// `amountOut` is computed off-chain from the CPMM invariant against the
+// public reserves; this circuit just shifts the reserves accordingly and
+// records an opaque position commitment. Amounts and reserves are public,
+// but the buyer's identity (which commitment is theirs) is not.
+export circuit buy(side: Side, collateralIn: Uint<128>, amountOut: Uint<128>): Bytes<32> {
+  assert(status == Status.OPEN, "market not open");
+  if (side == Side.YES) {
+    assert(reserveYes > amountOut, "insufficient YES liquidity");
+    reserveYes = disclose(reserveYes - amountOut);
+    reserveNo = disclose(reserveNo + collateralIn);
+  } else {
+    assert(reserveNo > amountOut, "insufficient NO liquidity");
+    reserveNo = disclose(reserveNo - amountOut);
+    reserveYes = disclose(reserveYes + collateralIn);
+  }
+  const c = disclose(commitment(side, amountOut));
+  positions.insert(c);
+  return c;
+}
+
+// ----------------- Resolution -----------------
+
+// After `closeTime`, anyone may propose an outcome. Starts the dispute window.
+export circuit proposeOutcome(side: Side, nowTs: Uint<64>): [] {
+  assert(status == Status.OPEN, "market not open");
+  assert(nowTs >= closeTime, "market still open");
+  proposedOutcome = disclose(side);
+  proposedAt = disclose(nowTs);
+  status = Status.PROPOSED;
+}
+
+// Settle the market once the dispute window has elapsed.
+export circuit settle(nowTs: Uint<64>): [] {
+  assert(status == Status.PROPOSED, "no proposal pending");
+  assert(nowTs >= proposedAt + disputeWindow, "dispute window open");
+  outcome = proposedOutcome;
+  status = Status.RESOLVED;
+}
+
+// Privately redeem a winning position. Reveals only the nullifier.
+export circuit redeem(side: Side, amountOut: Uint<128>): Uint<128> {
+  assert(status == Status.RESOLVED, "market not resolved");
+  assert(outcome == side, "wrong side");
+  const n = disclose(nullifier(side, amountOut));
+  assert(!nullifiers.member(n), "already redeemed");
+  nullifiers.insert(n);
+  return disclose(amountOut);
+}
+
+// ----------------- Helpers -----------------
+
+export circuit commitment(side: Side, amount: Uint<128>): Bytes<32> {
+  return persistentHash<Vector<5, Bytes<32>>>([
+    pad(32, "cocoa:pos:"),
+    localSecretKey(),
+    positionNonce(),
+    amount as Field as Bytes<32>,
+    sideTag(side),
+  ]);
+}
+
+export circuit nullifier(side: Side, amount: Uint<128>): Bytes<32> {
+  return persistentHash<Vector<5, Bytes<32>>>([
+    pad(32, "cocoa:null:"),
+    localSecretKey(),
+    positionNonce(),
+    amount as Field as Bytes<32>,
+    sideTag(side),
+  ]);
+}
+
+export circuit sideTag(side: Side): Bytes<32> {
+  if (side == Side.YES) {
+    return pad(32, "cocoa:yes");
+  } else {
+    return pad(32, "cocoa:no");
+  }
+}
