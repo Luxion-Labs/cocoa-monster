@@ -3,22 +3,27 @@ pragma language_version >= 0.20;
 import CompactStandardLibrary;
 
 export enum Side { YES, NO }
-export enum Status { OPEN, PROPOSED, RESOLVED }
+export enum Status { OPEN, RESOLVED }
 
 // ----------------- Public market state -----------------
 export ledger question: Opaque<"string">;
 export ledger closeTime: Uint<64>;
-export ledger disputeWindow: Uint<64>;
+
+// Public commitment to the oracle's identity. Whoever knows the
+// pre-image (`oracleSecret()` witness) is the trusted resolver. Stored
+// as `H("cocoa:oracle:" || oracleSecret)` so the secret never appears
+// on-chain even at deploy time.
+export ledger oraclePubKey: Bytes<32>;
 
 // CPMM reserves. YES probability = reserveNo / (reserveYes + reserveNo).
 export ledger reserveYes: Uint<128>;
 export ledger reserveNo: Uint<128>;
 
-// Optimistic oracle.
+// Lifecycle. With a single trusted signer there is no dispute window —
+// a market goes straight from OPEN to RESOLVED when the oracle calls
+// `resolve`.
 export ledger status: Status;
 export ledger outcome: Side;
-export ledger proposedOutcome: Side;
-export ledger proposedAt: Uint<64>;
 
 // Privacy: anonymous position commitments and one-shot redemption nullifiers.
 export ledger positions: Set<Bytes<32>>;
@@ -28,19 +33,22 @@ constructor(
   q: Opaque<"string">,
   initialLiquidity: Uint<128>,
   closeTimestamp: Uint<64>,
-  disputeSeconds: Uint<64>,
+  oracleId: Bytes<32>,
 ) {
   question = disclose(q);
   reserveYes = disclose(initialLiquidity);
   reserveNo = disclose(initialLiquidity);
   closeTime = disclose(closeTimestamp);
-  disputeWindow = disclose(disputeSeconds);
+  oraclePubKey = disclose(oracleId);
   status = Status.OPEN;
 }
 
 // ----------------- Witnesses (private) -----------------
 witness localSecretKey(): Bytes<32>;
 witness positionNonce(): Bytes<32>;
+// The oracle proves they hold this secret in `resolve`. For non-oracle
+// callers this returns zero and the assertion in `resolve` rejects.
+witness oracleSecret(): Bytes<32>;
 
 // ----------------- Trading -----------------
 
@@ -72,25 +80,18 @@ export circuit buy(side: Side, collateralIn: Uint<128>, amountOut: Uint<128>): B
 
 // ----------------- Resolution -----------------
 
-// After `closeTime`, anyone may propose an outcome. Starts the dispute window.
-export circuit proposeOutcome(side: Side, nowTs: Uint<64>): [] {
+// Trusted oracle resolves the market in a single step. The circuit
+// recomputes `H("cocoa:oracle:" || oracleSecret)` from the witness and
+// asserts it matches the on-chain `oraclePubKey`. Anyone who is not the
+// oracle has no witness for `oracleSecret` and the assertion fails.
+export circuit resolve(side: Side, nowTs: Uint<64>): [] {
   assert(status == Status.OPEN, "market not open");
   const publicNow = disclose(nowTs);
   assert(publicNow >= closeTime, "market still open");
-  proposedOutcome = disclose(side);
-  proposedAt = publicNow;
-  status = Status.PROPOSED;
-}
-
-// Settle the market once the dispute window has elapsed.
-export circuit settle(nowTs: Uint<64>): [] {
-  assert(status == Status.PROPOSED, "no proposal pending");
-  const publicNow = disclose(nowTs);
-  // Timestamps don't approach Uint<64>::MAX in any reachable future, so the
-  // narrow cast on `proposedAt + disputeWindow` is safe.
-  const settleAt = (proposedAt + disputeWindow) as Uint<64>;
-  assert(publicNow >= settleAt, "dispute window open");
-  outcome = proposedOutcome;
+  const sk = oracleSecret();
+  const expected = disclose(oracleCommitment(sk));
+  assert(expected == oraclePubKey, "not the oracle");
+  outcome = disclose(side);
   status = Status.RESOLVED;
 }
 
@@ -115,8 +116,7 @@ export circuit redeem(side: Side, amountOut: Uint<128>): Uint<128> {
 
 // ----------------- Helpers -----------------
 // Internal — take sk + nonce as parameters so callers stay in charge of
-// when witness values get hashed and disclosed (mirrors the bboard
-// publicKey pattern).
+// when witness values get hashed and disclosed.
 
 circuit commitment(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128>): Bytes<32> {
   return persistentHash<Vector<5, Bytes<32>>>([
@@ -135,5 +135,13 @@ circuit nullifier(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128>
     nonce,
     amount as Field as Bytes<32>,
     side as Field as Bytes<32>,
+  ]);
+}
+
+// Public commitment to an oracle secret.  `H("cocoa:oracle:" || sk)`.
+circuit oracleCommitment(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cocoa:oracle:"),
+    sk,
   ]);
 }

@@ -20,6 +20,11 @@ build-ui:
 # Build everything end-to-end
 build: build-contract build-ui
 
+# Run the contract simulator tests + UI component tests
+test:
+    cd contract && npm test
+    cd ui && npm test
+
 # Run the UI dev server (Vite)
 ui:
     cd ui && npm run dev
