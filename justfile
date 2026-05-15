@@ -36,9 +36,11 @@ down:
 dev:
     overmind start
 
-# Build the cocoa-monster Docker image (matches what CI ships)
+# Build the cocoa-monster Docker image via nix (matches what CI ships)
+# and load it into the local docker daemon as `cocoa-monster:latest`.
 docker-image:
-    docker build -f images/cocoa-monster/Dockerfile -t cocoa-monster .
+    nix build .#docker-image -o result
+    docker load -i result
 
 # Push the Concourse pipeline (set FLY_TARGET to override target name)
 repipe:

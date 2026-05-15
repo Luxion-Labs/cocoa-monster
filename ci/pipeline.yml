@@ -2,7 +2,7 @@
 #@ load("fragments.lib.yml",
 #@   "ci_orchestrator_image_config",
 #@   "alpine_image_config",
-#@   "build_image_task",
+#@   "nix_build_image_task",
 #@   "write_edge_tags_task",
 #@   "write_rc_tags_task",
 #@   "write_final_tags_task",
@@ -19,78 +19,39 @@ groups:
   - promote-release
 
 jobs:
-#! Singleton CI job. Runs the cheap nix-eval / flake-check before the
-#! image build so misconfigured derivations fail fast and don't waste
-#! time on a 5-minute docker buildkit run. The image is pushed with
-#! short-sha + `edge` tags so testflight / dev pulls always resolve to
-#! the latest mainline build.
+#! Singleton CI job. Runs `nix flake check` (cheap eval) and the image
+#! build (long pole) in parallel where possible. The image build
+#! itself runs every step the pipeline cares about — compact compile,
+#! contract TS build, vite ui build, nginx packaging — so the rest of
+#! the workflow's correctness rides on it being green.
 - name: ci
   serial: true
   plan:
   - get: repo
     trigger: true
 
-  #! Image build is the long pole — its Dockerfile already exercises
-  #! the full compact-compile → contract-build → ui-build chain, so a
-  #! green build is the single source of truth that the workspace
-  #! compiles end-to-end. Test-level coverage (typecheck, cypress
-  #! e2e) lives in `.github/workflows/ci.yml` for PR-time feedback,
-  #! Concourse focuses on shipping the image + driving CD downstream.
-  #!
-  #! Cypress runs in parallel with the image build because they share
-  #! no state — overlapping them shaves wall-clock time. The cypress
-  #! task brings its own sysdeps + the Compact CLI so it doesn't
-  #! depend on whatever's baked into ci-orchestrator.
-  - in_parallel:
-    - do:
-      - #@ build_image_task("build-image")
-      - #@ write_edge_tags_task()
-      - put: cocoa-monster-image
-        params:
-          image: image/image.tar
-          additional_tags: tags/tags.txt
-        get_params:
-          skip_download: true
+  - task: check-code
+    config:
+      platform: linux
+      image_resource: #@ ci_orchestrator_image_config()
+      inputs: [{ name: repo }]
+      run:
+        path: sh
+        args:
+          - -exc
+          - |
+            set -euo pipefail
+            cd repo
+            ci-run check-code nix flake check
 
-    - task: cypress
-      config:
-        platform: linux
-        image_resource:
-          type: registry-image
-          source:
-            repository: cypress/included
-            tag: "14"
-        inputs: [{ name: repo }]
-        params:
-          COMPACT_VERSION: "0.2.0"
-        run:
-          path: bash
-          args:
-            - -exc
-            - |
-              set -euo pipefail
-              cd repo
-              #! Compact CLI: same pinned version the Dockerfile uses.
-              #! cypress/included ships node 22 + curl, so the install
-              #! script just needs PATH wiring.
-              curl --proto '=https' --tlsv1.2 -LsSf \
-                "https://github.com/midnightntwrk/compact/releases/download/compact-v${COMPACT_VERSION}/compact-installer.sh" | sh
-              export PATH="$HOME/.local/bin:$PATH"
-              compact update
-              npm ci --legacy-peer-deps
-              npm --workspace contract run compact
-              npm --workspace contract run build
-              npm --workspace ui run build
-              npm --workspace ui run preview &
-              PREVIEW_PID=$!
-              trap 'kill -TERM "$PREVIEW_PID" 2>/dev/null || true' EXIT
-              for _ in $(seq 1 60); do
-                if curl -fsS http://localhost:4173 >/dev/null 2>&1; then
-                  break
-                fi
-                sleep 1
-              done
-              npm --workspace ui run e2e
+  - #@ nix_build_image_task("build-image")
+  - #@ write_edge_tags_task()
+  - put: cocoa-monster-image
+    params:
+      image: image/image.tar
+      additional_tags: tags/tags.txt
+    get_params:
+      skip_download: true
 
 #! Stand up the chart in an ephemeral namespace
 #! (cocoa-monster-testflight-<sha>) and assert pod readiness. No
@@ -158,7 +119,7 @@ jobs:
   - put: version
     params:
       pre: rc
-  - #@ build_image_task("build-rc-image")
+  - #@ nix_build_image_task("build-rc-image")
   - #@ write_rc_tags_task()
   - put: cocoa-monster-image
     params:
@@ -166,15 +127,7 @@ jobs:
       additional_tags: tags/tags.txt
     get_params:
       skip_download: true
-  #! Notes task on alpine + static git-cliff — keeps it independent of
-  #! ci-orchestrator and lets release-notes/{tag,name,body} land
-  #! directly in the task output.
   - #@ release_notes_task("generate-rc-notes", "version", "Release candidate")
-  #! github-prerelease resource has `pre_release: true, release: false`
-  #! in its source config so these come out marked as "Pre-release" in
-  #! the GitHub UI and are excluded from `releases/latest`. The
-  #! prerelease flag is a source-level setting in the concourse
-  #! github-release-resource — not a put param.
   - put: github-prerelease
     params:
       name: release-notes/name
@@ -299,56 +252,11 @@ jobs:
             printf '%s\n' "$RC_TAG"    > spec/rc_tag
             printf '%s\n' "$FINAL_TAG" > spec/final_tag
             printf '%s\n' "$BUILD_SHA" > spec/build_sha
-  - task: checkout-build-sha
-    config:
-      platform: linux
-      image_resource: #@ alpine_image_config()
-      inputs:
-      - name: repo
-      - name: spec
-      outputs:
-      - name: repo-pinned
-      run:
-        path: sh
-        args:
-          - -exc
-          - |
-            set -euo pipefail
-            apk add --no-cache git >/dev/null
-            BUILD_SHA="$(cat spec/build_sha)"
-            cp -a repo/. repo-pinned/
-            cd repo-pinned
-            git config --global --add safe.directory "$PWD"
-            #! No `git fetch` — the task container lacks SSH host keys
-            #! and would hang. The git resource already fetches the
-            #! full branch into `repo`, so BUILD_SHA is present unless
-            #! main was rewritten; in that case fail loudly rather than
-            #! silently build wrong bits.
-            if ! git rev-parse --verify "$BUILD_SHA^{commit}" >/dev/null 2>&1; then
-              echo "FATAL: BUILD_SHA $BUILD_SHA not in repo input" >&2
-              exit 1
-            fi
-            git checkout "$BUILD_SHA"
-  #! Re-build the image at the exact commit prod is running. Same
-  #! Dockerfile inputs => same image bits; we just push under the
-  #! final + latest tags pointing at those layers.
-  - task: build-final-image
-    privileged: true
-    config:
-      platform: linux
-      image_resource:
-        type: registry-image
-        source:
-          repository: concourse/oci-build-task
-      inputs:
-      - name: repo-pinned
-      outputs:
-      - name: image
-      params:
-        DOCKERFILE: repo-pinned/images/cocoa-monster/Dockerfile
-        CONTEXT: repo-pinned
-      run:
-        path: build
+  #! Re-build the image at the exact commit prod is running. nix is
+  #! hermetic, so rebuilding at that sha reproduces the same image
+  #! bits the rc shipped — we just push under the final + latest
+  #! tags pointing at those layers.
+  - #@ nix_build_image_task("build-final-image", checkout_sha_file="spec/build_sha")
   - #@ write_final_tags_task()
   - put: cocoa-monster-image
     params:

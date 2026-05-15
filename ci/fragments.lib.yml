@@ -1,9 +1,10 @@
 #@ load("@ytt:data", "data")
 
-#! ci-orchestrator carries helm + tofu + kubectl + git + node + just etc.
-#! Used for the testflight task and any step that needs the cluster
-#! toolchain. Pulled from the same private registry as the app images,
-#! so the registry_user/password from values.yml apply.
+#! ci-orchestrator carries nix + helm + tofu + kubectl + git + the
+#! `ci-run` wrapper that dispatches commands to a remote nix worker and
+#! gunzips the resulting `result` symlink into `./image/image.tar` on
+#! exit. Pulled from the same private registry as the app images, so
+#! the registry_user/password from values.yml apply.
 #@ def ci_orchestrator_image_config():
 type: registry-image
 source:
@@ -13,19 +14,10 @@ source:
   password: #@ data.values.registry_password
 #@ end
 
-#! Standard concourse oci-build-task. Builds from a Dockerfile and
-#! emits image/image.tar that the registry-image resource consumes.
-#! `privileged: true` is required for buildkit to run inside the task.
-#@ def oci_build_image_config():
-type: registry-image
-source:
-  repository: concourse/oci-build-task
-#@ end
-
 #! Tiny alpine for tag-prep + git-cliff release-notes. Keeping these
-#! steps off ci-orchestrator means `image/image.tar` and tag files land
-#! directly in the task's filesystem (no remote-worker persistence
-#! issue) — matches the same pattern used by the build repo.
+#! steps off ci-orchestrator means tag files land directly in the
+#! task's filesystem (no remote-worker persistence issue) — matches
+#! the same pattern used by the build repo.
 #@ def alpine_image_config():
 type: registry-image
 source:
@@ -85,34 +77,55 @@ config:
           > ../release-notes/body
 #@ end
 
-#! Builds the cocoa-monster image from images/cocoa-monster/Dockerfile
-#! using concourse/oci-build-task. The task expects the Dockerfile and
-#! a build context as inputs and writes image/image.tar.
+#! Builds the cocoa-monster image via `nix build .#docker-image`
+#! dispatched to the home-cluster's remote nix worker through ci-run.
+#! The flake derivation produces a `result` symlink to a gzipped
+#! docker-load tarball; ci-run's post-hook (in the ci-orchestrator
+#! image) gunzips and copies it into ./image/image.tar where the
+#! Concourse registry-image resource expects to find it.
 #!
-#! `tag_text` is what gets written to tags/tags.txt — single-line for
-#! "<sha> edge", multi-line for prerelease ("v<X.Y.Z>") and
-#! promote-release ("v<X.Y.Z> latest"). The registry-image put consumes
-#! tags/tags.txt as `additional_tags` (whitespace-split).
-#@ def build_image_task(task_name="build-image"):
+#! checkout_sha is optional — the ci job leaves it empty so nix runs
+#! against repo HEAD; promote-release passes a sha to pin the rebuild
+#! to the exact commit prod actually shipped from.
+#@ def nix_build_image_task(task_name="build-image", checkout_sha_file=""):
 task: #@ task_name
-privileged: true
 config:
   platform: linux
-  image_resource: #@ oci_build_image_config()
+  image_resource: #@ ci_orchestrator_image_config()
   inputs:
   - name: repo
   outputs:
   - name: image
   params:
-    DOCKERFILE: repo/images/cocoa-monster/Dockerfile
-    CONTEXT: repo
+    CHECKOUT_SHA_FILE: #@ checkout_sha_file
   run:
-    path: build
+    path: sh
+    args:
+      - -exc
+      - |
+        set -euo pipefail
+        cd repo
+        if [ -n "$CHECKOUT_SHA_FILE" ]; then
+          target_sha="$(cat "../$CHECKOUT_SHA_FILE")"
+          if ! git rev-parse --verify "$target_sha^{commit}" >/dev/null 2>&1; then
+            echo "FATAL: target sha $target_sha not in repo input" >&2
+            exit 1
+          fi
+          git checkout "$target_sha"
+        fi
+        ci-run build-image nix build .#docker-image -o result
+        # Belt-and-braces: ci-run's post-hook is supposed to place
+        # image/image.tar; if a future ci-orchestrator change drops
+        # that behavior, fall back to a manual gunzip so the put
+        # downstream still finds the file.
+        if [ ! -f ../image/image.tar ]; then
+          gunzip -c "$(readlink -f result)" > ../image/image.tar
+        fi
 #@ end
 
 #! Computes the short-sha + edge tag pair into tags/tags.txt for the
-#! `ci` job's image push. Separate task because oci-build-task doesn't
-#! emit tag info.
+#! `ci` job's image push. Separate task because nix_build_image_task
+#! doesn't emit tag info.
 #@ def write_edge_tags_task():
 task: write-edge-tags
 config:
