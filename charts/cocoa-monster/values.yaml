@@ -1,0 +1,67 @@
+fullnameOverride: ""
+nameOverride: ""
+
+imagePullSecrets: []
+
+# Single nginx-served static SPA. The image bundles the compiled
+# Compact contract bindings + the Vite-built UI dist; runtime is just
+# nginx serving /usr/share/nginx/html with the SPA fallback baked into
+# images/cocoa-monster/nginx.conf.
+replicaCount: 1
+
+image:
+  repository: registry.home.sandipan.dev/cocoa-monster
+  tag: edge
+  pullPolicy: IfNotPresent
+
+# Static assets are immutable per content-hash; rolling restarts during
+# a release shouldn't drop in-flight requests for users currently on
+# the SPA. Toggle off only when staging is set to replicaCount=1 (PDB
+# requires at least 2 healthy replicas to mean anything).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+# When `enabled: true`, fronts the static site at `host` with
+# nginx-class ingress + cert-manager TLS. Override per-env in
+# staging/cocoa-monster/values.yaml (host: staging.cocoa.monster) and
+# prod/cocoa-monster/values.yaml (host: cocoa.monster).
+ingress:
+  enabled: false
+  className: nginx
+  host: ""
+  annotations: {}
+
+# Extra envs forwarded to the nginx container — the static bundle is
+# already baked at build time, so these are mostly diagnostic
+# (e.g. RUNTIME_ENV) rather than feature-flag style. For real config
+# the bundle should re-fetch a /env.json at boot from a separate
+# ConfigMap mount.
+env: []
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Liveness / readiness — nginx ships /healthz from the baked nginx.conf
+# (returns 200 'ok' on a non-SPA path). HTTP probes are cheaper than
+# TCP-level since they exercise the server's request loop.
+probes:
+  liveness:
+    enabled: true
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 6
+  readiness:
+    enabled: true
+    path: /healthz
+    initialDelaySeconds: 2
+    periodSeconds: 5
+    failureThreshold: 3

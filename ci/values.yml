@@ -1,0 +1,17 @@
+#@data/values
+---
+git_uri: git@github.com:sandipndev/cocoa-monster.git
+git_branch: main
+github_private_key: ((github.private_key))
+github_api_token: ((github.api_token))
+
+deployments_git_uri: git@github.com:sandipndev/deployments.git
+deployments_git_branch: main
+deployments_private_key: ((deployments-push.ssh_key))
+
+registry: registry.home.sandipan.dev
+registry_user: ((docker-registry.username))
+registry_password: ((docker-registry.password))
+
+registry_image: cocoa-monster
+kubeconfig: ((kubeconfig.kubeconfig))

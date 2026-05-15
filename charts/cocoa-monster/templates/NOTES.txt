@@ -1,0 +1,6 @@
+{{ include "cocoa-monster.fullname" . }} deployed in namespace {{ .Release.Namespace }}.
+
+Service: {{ include "cocoa-monster.fullname" . }}:{{ .Values.service.port }} ({{ .Values.service.type }})
+{{- if .Values.ingress.enabled }}
+Public:  https://{{ .Values.ingress.host }}/
+{{- end }}

@@ -36,6 +36,19 @@ down:
 dev:
     overmind start
 
-# Build the UI Docker image
-docker-ui:
-    docker build -f ui/Dockerfile -t cocoa-monster-ui .
+# Build the cocoa-monster Docker image (matches what CI ships)
+docker-image:
+    docker build -f images/cocoa-monster/Dockerfile -t cocoa-monster .
+
+# Push the Concourse pipeline (set FLY_TARGET to override target name)
+repipe:
+    ./ci/repipe
+
+# Lint the helm chart so a stray template syntax error doesn't slip
+# through to the deployments-side tofu apply.
+helm-lint:
+    helm lint charts/cocoa-monster
+
+# Render the chart with the testflight values for offline review.
+helm-template:
+    helm template cocoa-monster charts/cocoa-monster -f ci/testflight/values.yaml

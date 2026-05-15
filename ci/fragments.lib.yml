@@ -1,0 +1,179 @@
+#@ load("@ytt:data", "data")
+
+#! ci-orchestrator carries helm + tofu + kubectl + git + node + just etc.
+#! Used for the testflight task and any step that needs the cluster
+#! toolchain. Pulled from the same private registry as the app images,
+#! so the registry_user/password from values.yml apply.
+#@ def ci_orchestrator_image_config():
+type: registry-image
+source:
+  repository: #@ data.values.registry + "/ci-orchestrator"
+  tag: latest
+  username: #@ data.values.registry_user
+  password: #@ data.values.registry_password
+#@ end
+
+#! Standard concourse oci-build-task. Builds from a Dockerfile and
+#! emits image/image.tar that the registry-image resource consumes.
+#! `privileged: true` is required for buildkit to run inside the task.
+#@ def oci_build_image_config():
+type: registry-image
+source:
+  repository: concourse/oci-build-task
+#@ end
+
+#! Tiny alpine for tag-prep + git-cliff release-notes. Keeping these
+#! steps off ci-orchestrator means `image/image.tar` and tag files land
+#! directly in the task's filesystem (no remote-worker persistence
+#! issue) — matches the same pattern used by the build repo.
+#@ def alpine_image_config():
+type: registry-image
+source:
+  repository: alpine
+  tag: "3.19"
+#@ end
+
+#! Renders release-notes/{tag,name,body} from the conventional-commits
+#! changelog (cliff.toml at repo root). Reused by the rc prerelease and
+#! the final promote-release. tag_var_source picks where the
+#! authoritative tag string lives:
+#!   - "version" => `version/version` (semver-resource output, bare
+#!     "0.0.7-rc.3"; we prepend "v")
+#!   - "spec"    => `spec/final_tag` (already "vX.Y.Z" from
+#!     promote-release's derive-release-spec task)
+#! checkout_sha_file is empty for the prerelease (notes anchor on
+#! branch HEAD) and set to "spec/build_sha" for promote-release so the
+#! changelog walk pins to the exact commit that shipped to prod.
+#@ def release_notes_task(task_name, tag_var_source, name_prefix, checkout_sha_file=""):
+task: #@ task_name
+config:
+  platform: linux
+  image_resource: #@ alpine_image_config()
+  inputs:
+  - name: repo
+  - name: #@ tag_var_source
+  outputs:
+  - name: release-notes
+  params:
+    GIT_CLIFF_VERSION: "2.12.0"
+    NAME_PREFIX: #@ name_prefix
+    TAG_VAR_SOURCE: #@ tag_var_source
+    CHECKOUT_SHA_FILE: #@ checkout_sha_file
+  run:
+    path: sh
+    args:
+      - -exc
+      - |
+        set -euo pipefail
+        apk add --no-cache git curl ca-certificates >/dev/null
+        case "$TAG_VAR_SOURCE" in
+          version) tag="v$(cat "${TAG_VAR_SOURCE}/version")" ;;
+          spec)    tag="$(cat "${TAG_VAR_SOURCE}/final_tag")" ;;
+          *)       echo "unexpected TAG_VAR_SOURCE=$TAG_VAR_SOURCE" >&2; exit 1 ;;
+        esac
+        printf '%s\n'    "$tag"               > release-notes/tag
+        printf '%s %s\n' "$NAME_PREFIX" "$tag" > release-notes/name
+        curl -sfL "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+          | tar xz -C /tmp --strip-components=1
+        install -m755 /tmp/git-cliff /usr/local/bin/git-cliff
+        cd repo
+        git config --global --add safe.directory "$PWD"
+        if [ -n "$CHECKOUT_SHA_FILE" ]; then
+          git checkout "$(cat "../$CHECKOUT_SHA_FILE")"
+        fi
+        git-cliff --config cliff.toml --unreleased --tag "$tag" \
+          > ../release-notes/body
+#@ end
+
+#! Builds the cocoa-monster image from images/cocoa-monster/Dockerfile
+#! using concourse/oci-build-task. The task expects the Dockerfile and
+#! a build context as inputs and writes image/image.tar.
+#!
+#! `tag_text` is what gets written to tags/tags.txt — single-line for
+#! "<sha> edge", multi-line for prerelease ("v<X.Y.Z>") and
+#! promote-release ("v<X.Y.Z> latest"). The registry-image put consumes
+#! tags/tags.txt as `additional_tags` (whitespace-split).
+#@ def build_image_task(task_name="build-image"):
+task: #@ task_name
+privileged: true
+config:
+  platform: linux
+  image_resource: #@ oci_build_image_config()
+  inputs:
+  - name: repo
+  outputs:
+  - name: image
+  params:
+    DOCKERFILE: repo/images/cocoa-monster/Dockerfile
+    CONTEXT: repo
+  run:
+    path: build
+#@ end
+
+#! Computes the short-sha + edge tag pair into tags/tags.txt for the
+#! `ci` job's image push. Separate task because oci-build-task doesn't
+#! emit tag info.
+#@ def write_edge_tags_task():
+task: write-edge-tags
+config:
+  platform: linux
+  image_resource: #@ alpine_image_config()
+  inputs:
+  - name: repo
+  outputs:
+  - name: tags
+  run:
+    path: sh
+    args:
+      - -exc
+      - |
+        set -euo pipefail
+        apk add --no-cache git >/dev/null
+        cd repo
+        git config --global --add safe.directory "$PWD"
+        short_sha="$(git rev-parse --short HEAD)"
+        printf '%s edge\n' "$short_sha" > ../tags/tags.txt
+#@ end
+
+#! Computes "v<X.Y.Z(-rc.N)?>" into tags/tags.txt for the prerelease
+#! job's image push (rc tag only — no `edge` here, edge is mutable and
+#! would clobber the ci job's last edge push).
+#@ def write_rc_tags_task():
+task: write-rc-tags
+config:
+  platform: linux
+  image_resource: #@ alpine_image_config()
+  inputs:
+  - name: version
+  outputs:
+  - name: tags
+  run:
+    path: sh
+    args:
+      - -exc
+      - |
+        set -euo pipefail
+        v="$(cat version/version)"
+        printf 'v%s\n' "$v" > tags/tags.txt
+#@ end
+
+#! Computes "<final_tag> latest" into tags/tags.txt for promote-release.
+#! Reads spec/final_tag (already prefixed with "v" by derive-release-spec).
+#@ def write_final_tags_task():
+task: write-final-tags
+config:
+  platform: linux
+  image_resource: #@ alpine_image_config()
+  inputs:
+  - name: spec
+  outputs:
+  - name: tags
+  run:
+    path: sh
+    args:
+      - -exc
+      - |
+        set -euo pipefail
+        FINAL="$(cat spec/final_tag)"
+        printf '%s latest\n' "$FINAL" > tags/tags.txt
+#@ end

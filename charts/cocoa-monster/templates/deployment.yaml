@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cocoa-monster.fullname" . }}
+  labels:
+    {{- include "cocoa-monster.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cocoa-monster.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cocoa-monster.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cocoa-monster
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

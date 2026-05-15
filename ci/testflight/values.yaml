@@ -1,0 +1,13 @@
+# Testflight values — deployed into an ephemeral
+# cocoa-monster-testflight-<sha> namespace, torn down at task end.
+image:
+  repository: registry.home.sandipan.dev/cocoa-monster
+  tag: edge
+  pullPolicy: Always
+
+replicaCount: 1
+
+# No ingress for testflight — we verify pod readiness only. The
+# `staging` and `prod` env values turn it on with the public hosts.
+ingress:
+  enabled: false

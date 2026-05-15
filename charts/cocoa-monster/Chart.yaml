@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cocoa-monster
+description: Helm chart for cocoa.monster — privacy-first prediction markets on Midnight
+type: application
+version: 0.1.0-dev
+appVersion: "0.1.0"
