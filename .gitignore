@@ -32,6 +32,8 @@ result
 # Local data
 midnight-level-db/
 .overmind.sock
+.playwright-mcp/
+oracle/data/
 
 # Cypress artifacts
 cypress/screenshots/

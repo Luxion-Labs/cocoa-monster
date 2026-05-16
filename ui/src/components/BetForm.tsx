@@ -2,11 +2,16 @@ import { type CocoaApi, type CocoaState, Side, quoteAmountOut } from "cocoa-cont
 import { useMemo, useState } from "react";
 
 import { formatBigInt, formatPriceYes } from "../lib/format";
+import type { LaceConnection } from "../lib/wallet";
 
 type Props = {
   api: CocoaApi;
   state: CocoaState;
+  wallet?: LaceConnection;
 };
+
+const NATIVE_TOKEN =
+  "0000000000000000000000000000000000000000000000000000000000000000";
 
 const parseStake = (raw: string): bigint | null => {
   if (!/^\d+$/.test(raw.trim())) return null;
@@ -18,7 +23,7 @@ const parseStake = (raw: string): bigint | null => {
   }
 };
 
-export const BetForm = ({ api, state }: Props) => {
+export const BetForm = ({ api, state, wallet }: Props) => {
   const [side, setSide] = useState<Side>(Side.YES);
   const [stakeRaw, setStakeRaw] = useState("100");
   const [submitting, setSubmitting] = useState(false);
@@ -52,6 +57,15 @@ export const BetForm = ({ api, state }: Props) => {
     setError(null);
     setSuccess(null);
     try {
+      if (wallet) {
+        const balances = await wallet.connected.getUnshieldedBalances();
+        const unshieldedNight = balances[NATIVE_TOKEN] ?? 0n;
+        if (unshieldedNight < stake) {
+          throw new Error(
+            `Insufficient unshielded NIGHT. Need ${formatBigInt(stake)}, available ${formatBigInt(unshieldedNight)}.`,
+          );
+        }
+      }
       const position = await api.buy(side, stake, quote);
       setSuccess(
         `Bet submitted: ${formatBigInt(position.amount)} NIGHT staked on ${

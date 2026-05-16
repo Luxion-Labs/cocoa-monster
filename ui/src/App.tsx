@@ -5,6 +5,7 @@ import { useWallet } from "./hooks/useWallet";
 import { CreateMarketPage } from "./pages/CreateMarketPage";
 import { MarketDetailPage } from "./pages/MarketDetailPage";
 import { MarketListPage } from "./pages/MarketListPage";
+import { ShieldNightPage } from "./pages/ShieldNightPage";
 
 const App = () => {
   const wallet = useWallet();
@@ -26,6 +27,7 @@ const App = () => {
           <Route path="/" element={<MarketListPage />} />
           <Route path="/create" element={<CreateMarketPage />} />
           <Route path="/m/:address" element={<MarketDetailPage />} />
+          <Route path="/__shield" element={<ShieldNightPage />} />
         </Routes>
       </main>
       <footer className="app__footer">

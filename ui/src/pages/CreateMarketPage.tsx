@@ -6,13 +6,14 @@ import { useWallet } from "../hooks/useWallet";
 import { buildCocoaProviders } from "../lib/providers";
 import { rememberMarket } from "../lib/markets";
 import { explainError } from "../lib/errors";
+import { prepareOracle, registerOracleMarket } from "../lib/oracle";
 
 const DEFAULT_LIQUIDITY = "1000";
 
 export const CreateMarketPage = () => {
   const wallet = useWallet();
   const navigate = useNavigate();
-  
+
   const [question, setQuestion] = useState("");
   const [liquidity, setLiquidity] = useState(DEFAULT_LIQUIDITY);
   const [closeAt, setCloseAt] = useState<string>(() => {
@@ -71,15 +72,23 @@ export const CreateMarketPage = () => {
         initialLiquidity: String(liquidityBig),
         closeTime: String(closeTimestamp),
       });
-      // Generate a fresh oracle secret — the deployer becomes the trusted
-      // oracle, and only their device's private state will satisfy the
-      // contract's `oracleSecret()` witness later.
+      const oracle = await prepareOracle({
+        question: question.trim(),
+        closeTime: closeTimestamp!,
+      });
       const api = await deployCocoaMarket(providers, {
         question: question.trim(),
         initialLiquidity: liquidityBig!,
         closeTime: closeTimestamp!,
+        oraclePubKey: oracle.oraclePubKey,
       });
       console.debug("[cocoa] deployed at", api.contractAddress);
+      await registerOracleMarket({
+        oracleId: oracle.oracleId,
+        contractAddress: api.contractAddress,
+        question: question.trim(),
+        closeTime: closeTimestamp!,
+      });
       rememberMarket({
         contractAddress: api.contractAddress,
         question: question.trim(),
@@ -101,7 +110,12 @@ export const CreateMarketPage = () => {
       </header>
       {!wallet.connection ? (
         <div className="empty-state">
-          <p>Connect wallet from the top bar to deploy a new market.</p>
+          <p>
+            {wallet.status.kind === "connecting" ||
+            wallet.status.kind === "checking"
+              ? "Syncing wallet connection..."
+              : "Connect wallet from the top bar to deploy a new market."}
+          </p>
         </div>
       ) : (
         <form onSubmit={submit} className="create-market__form" data-testid="create-market-form">
@@ -137,9 +151,8 @@ export const CreateMarketPage = () => {
             />
           </label>
           <p className="create-market__note">
-            You'll become this market's <strong>trusted oracle</strong>. The
-            secret is generated client-side and stored in your wallet's
-            private state — the public key on-chain is its hash.
+            The oracle service prepares the market key and registers the
+            deployed contract for shared discovery.
           </p>
           <button
             type="submit"

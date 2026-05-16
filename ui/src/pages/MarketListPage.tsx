@@ -5,7 +5,7 @@ import { MarketCard } from "../components/MarketCard";
 import { listKnownMarkets, type KnownMarket } from "../lib/markets";
 import {
   fetchMarketStates,
-  fetchRegistryMarkets,
+  fetchSharedMarkets,
   mergeWithLocalMarkets,
   type DiscoveredMarket,
 } from "../lib/discovery";
@@ -75,8 +75,8 @@ export const MarketListPage = () => {
 
       try {
         const local = listKnownMarkets();
-        const registry = await fetchRegistryMarkets();
-        const known = mergeKnownMarkets(local, registry);
+        const shared = await fetchSharedMarkets();
+        const known = mergeKnownMarkets(local, shared);
 
         if (known.length > 0 && !cancelled) {
           setMarkets(known.map(toPlaceholderMarket));
@@ -199,8 +199,7 @@ export const MarketListPage = () => {
         <div className="empty-state" data-testid="market-list-empty">
           <h2>No markets found</h2>
           <p>
-            Deploy a market or connect a registry with{" "}
-            <code>VITE_MARKET_REGISTRY_URL</code>.
+            Deploy a market or connect the shared oracle registry.
           </p>
           <Link to="/create" className="btn btn--primary">
             New market

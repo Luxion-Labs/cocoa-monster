@@ -41,6 +41,8 @@ describe("Cocoa contract — buy circuit", () => {
     expect(stake).toBe(100n);
     expect(after.reserveYes).toBe(before.reserveYes - quote);
     expect(after.reserveNo).toBe(before.reserveNo + 100n);
+    expect(after.pool).toBe(before.pool + 100n);
+    expect(after.volume).toBe(before.volume + 100n);
     expect(after.positions.size()).toBe(1n);
     expect(after.nullifiers.isEmpty()).toBe(true);
   });
@@ -173,6 +175,7 @@ describe("Cocoa contract — redeem circuit", () => {
 
     const payout = sim.redeem(Side.YES, amountOut);
     expect(payout).toBe(amountOut);
+    expect(sim.ledger().pool).toBe(0n);
     expect(sim.ledger().nullifiers.size()).toBe(1n);
   });
 

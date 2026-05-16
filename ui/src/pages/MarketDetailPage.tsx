@@ -112,9 +112,19 @@ export const MarketDetailPage = () => {
               </div>
             )}
             {api && state.status === Status.OPEN && (
-              <BetForm api={api} state={state} />
+              <BetForm
+                api={api}
+                state={state}
+                wallet={wallet.connection ?? undefined}
+              />
             )}
-            {api && <ClaimPanel api={api} state={state} />}
+            {api && (
+              <ClaimPanel
+                api={api}
+                state={state}
+                wallet={wallet.connection ?? undefined}
+              />
+            )}
             {api && <ResolvePanel api={api} state={state} />}
           </aside>
         </div>

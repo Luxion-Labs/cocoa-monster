@@ -16,7 +16,7 @@ compact:
         echo "contract build is up to date"; \
     fi
 
-# Compile the contract, start the proof server, and boot the UI.
+# Compile the contract, then start proof, oracle, and UI services.
 dev: install compact
     overmind start
 

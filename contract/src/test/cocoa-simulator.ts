@@ -7,6 +7,7 @@ import {
   CompactTypeVector,
   sampleContractAddress,
 } from "@midnight-ntwrk/compact-runtime";
+import { encodeUserAddress, sampleUserAddress } from "@midnight-ntwrk/ledger-v8";
 import { webcrypto } from "node:crypto";
 
 import {
@@ -133,16 +134,11 @@ export class CocoaSimulator {
         positionNonce: randomBytes32(),
       },
     };
-    const coin = {
-      nonce: randomBytes32(),
-      color: new Uint8Array(32), // nativeToken() — pad(32, "")
-      value: stakeIn,
-    };
     const result = this.contract.circuits.buy(
       this.circuitContext,
       side,
       amountOut,
-      coin,
+      stakeIn,
     );
     this.circuitContext = result.context;
     return result.result;
@@ -162,6 +158,7 @@ export class CocoaSimulator {
       this.circuitContext,
       side,
       amountOut,
+      { bytes: encodeUserAddress(sampleUserAddress()) },
     );
     this.circuitContext = result.context;
     return result.result;

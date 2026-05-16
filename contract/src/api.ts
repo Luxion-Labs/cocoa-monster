@@ -11,6 +11,7 @@ import {
   deployContract,
   findDeployedContract,
 } from "@midnight-ntwrk/midnight-js-contracts";
+import { encodeUserAddress, type UserAddress } from "@midnight-ntwrk/ledger-v8";
 import { pipe } from "effect";
 import { type Observable } from "rxjs";
 import { map } from "rxjs/operators";
@@ -82,10 +83,16 @@ export type DeployCocoaMarketOptions = {
   initialLiquidity: bigint;
   closeTime: bigint;
   /**
-   * Optional. If omitted a fresh oracle secret is generated and stored in
-   * the deployer's private state — the deployer becomes the trusted oracle.
+   * Optional local oracle secret. If omitted and `oraclePubKey` is not
+   * supplied, a fresh oracle secret is generated and stored in the deployer's
+   * private state.
    */
   oracleSecret?: Uint8Array;
+  /**
+   * Optional external oracle commitment. When supplied, the browser does not
+   * know the oracle secret and cannot resolve the market directly.
+   */
+  oraclePubKey?: Uint8Array;
   secretKey?: Uint8Array;
   positionNonce?: Uint8Array;
 };
@@ -94,8 +101,17 @@ export const deployCocoaMarket = async (
   providers: CocoaProviders,
   opts: DeployCocoaMarketOptions,
 ): Promise<CocoaApi> => {
-  const oracleSecret = opts.oracleSecret ?? randomBytes32();
-  const oraclePubKey = computeOraclePubKey(oracleSecret);
+  const oracleSecret = opts.oracleSecret ?? (opts.oraclePubKey ? ZERO_32 : randomBytes32());
+  const oraclePubKey = opts.oraclePubKey ?? computeOraclePubKey(oracleSecret);
+  if (opts.oraclePubKey && opts.oracleSecret) {
+    const expected = computeOraclePubKey(opts.oracleSecret);
+    if (
+      expected.length !== opts.oraclePubKey.length ||
+      expected.some((b, i) => b !== opts.oraclePubKey![i])
+    ) {
+      throw new Error("oraclePubKey does not match oracleSecret");
+    }
+  }
   const initialPrivateState = createCocoaPrivateState(
     opts.secretKey ?? randomBytes32(),
     opts.positionNonce ?? randomBytes32(),
@@ -176,12 +192,7 @@ export class CocoaApi {
   ): Promise<CocoaPosition> {
     const nonce = randomBytes32();
     await this.rotateNonce(nonce);
-    const coin = {
-      nonce: randomBytes32(),
-      color: new Uint8Array(32), // native NIGHT — pad(32, "")
-      value: stakeIn,
-    };
-    const result = await this.deployed.callTx.buy(side, amountOut, coin);
+    const result = await this.deployed.callTx.buy(side, amountOut, stakeIn);
     const amount = (result as { private: { result: bigint } }).private.result;
     const position: CocoaPosition = { side, amount, nonce };
     await this.appendOwnedPosition(position);
@@ -192,11 +203,12 @@ export class CocoaApi {
     await this.deployed.callTx.resolve(side, nowTs);
   }
 
-  async redeem(position: CocoaPosition): Promise<bigint> {
+  async redeem(position: CocoaPosition, recipient: UserAddress): Promise<bigint> {
     await this.rotateNonce(position.nonce);
     const result = await this.deployed.callTx.redeem(
       position.side,
       position.amount,
+      { bytes: encodeUserAddress(recipient) },
     );
     await this.markPositionRedeemed(position);
     return (result as { private: { result: bigint } }).private.result;

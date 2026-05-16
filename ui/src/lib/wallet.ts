@@ -91,6 +91,43 @@ const waitForInitialApi = async (
   throw new LaceNotInstalledError();
 };
 
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+const shieldedAddressIsSyncing = (err: unknown): boolean => {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.toLowerCase().includes("syncing") ||
+    message.toLowerCase().includes("shielded address not yet available")
+  );
+};
+
+const getShieldedAddressesWhenReady = async (
+  connected: ConnectedAPI,
+  timeoutMs: number,
+): ReturnType<ConnectedAPI["getShieldedAddresses"]> => {
+  const start = Date.now();
+  let lastError: unknown = null;
+  let loggedSyncWait = false;
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      return await connected.getShieldedAddresses();
+    } catch (err) {
+      lastError = err;
+      if (!shieldedAddressIsSyncing(err)) throw err;
+      if (!loggedSyncWait) {
+        // eslint-disable-next-line no-console
+        console.debug("[cocoa] wallet connected; waiting for shielded sync");
+        loggedSyncWait = true;
+      }
+      await sleep(1_000);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+};
+
 /**
  * Connect to Lace via the 4.x InitialAPI: discover the connector under a
  * UUID-keyed entry on `window.midnight`, request a connection for the
@@ -115,7 +152,7 @@ export const connectLace = async (
     Object.keys(connected as unknown as Record<string, unknown>),
   );
   const [addresses, configuration] = await Promise.all([
-    connected.getShieldedAddresses(),
+    getShieldedAddressesWhenReady(connected, 10 * 60_000),
     connected.getConfiguration(),
   ]);
   // eslint-disable-next-line no-console

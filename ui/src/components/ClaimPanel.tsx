@@ -8,13 +8,15 @@ import {
 import { useEffect, useState } from "react";
 
 import { formatBigInt, formatSide } from "../lib/format";
+import type { LaceConnection } from "../lib/wallet";
 
 type Props = {
   api: CocoaApi;
   state: CocoaState;
+  wallet?: LaceConnection;
 };
 
-export const ClaimPanel = ({ api, state }: Props) => {
+export const ClaimPanel = ({ api, state, wallet }: Props) => {
   const [positions, setPositions] = useState<readonly CocoaPosition[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingNonce, setLoadingNonce] = useState<Uint8Array | null>(null);
@@ -38,7 +40,11 @@ export const ClaimPanel = ({ api, state }: Props) => {
     setLoadingNonce(position.nonce);
     setError(null);
     try {
-      await api.redeem(position);
+      if (!wallet) {
+        throw new Error("Connect wallet to claim payouts.");
+      }
+      const recipient = await wallet.connected.getUnshieldedAddress();
+      await api.redeem(position, recipient.unshieldedAddress);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

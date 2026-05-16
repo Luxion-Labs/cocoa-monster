@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.git/
+.direnv/
+.playwright-mcp/
+.overmind.sock
+midnight-level-db/
+oracle/data/
+ui/dist/
+ui/.vite/
+ui/public/keys/
+ui/public/zkir/
+contract/dist/

@@ -9,6 +9,8 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 // different host (e.g. a remote proof-server you control).
 const proofServerUpstream =
   process.env.VITE_PROOF_SERVER_UPSTREAM ?? "http://localhost:6300";
+const oracleUpstream =
+  process.env.VITE_ORACLE_UPSTREAM ?? "http://localhost:8787";
 
 export default defineConfig({
   cacheDir: "./.vite",
@@ -32,6 +34,11 @@ export default defineConfig({
         target: "https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/midnight-artifacts/, ""),
+      },
+      "/oracle-api": {
+        target: oracleUpstream,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/oracle-api/, ""),
       },
     },
   },

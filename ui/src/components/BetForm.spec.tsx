@@ -122,4 +122,28 @@ describe("BetForm", () => {
     await screen.findByTestId("bet-form-error");
     expect(screen.getByTestId("bet-form-error").textContent).toMatch(/nope/);
   });
+
+  it("checks unshielded NIGHT before submitting when wallet is available", async () => {
+    const api = fakeApi();
+    const wallet = {
+      connected: {
+        getUnshieldedBalances: vi.fn(async () => ({})),
+      },
+    };
+    render(
+      <BetForm
+        api={api}
+        state={baseState}
+        wallet={wallet as never}
+      />,
+    );
+
+    fireEvent.submit(screen.getByTestId("bet-form"));
+
+    await screen.findByTestId("bet-form-error");
+    expect(api.buy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("bet-form-error").textContent).toMatch(
+      /Insufficient unshielded NIGHT/,
+    );
+  });
 });
