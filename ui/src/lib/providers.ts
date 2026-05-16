@@ -49,11 +49,10 @@ export const buildCocoaProviders = (lace: LaceConnection): CocoaProviders => {
   const indexerUri = lace.configuration.indexerUri ?? cocoaConfig.indexerUri;
   const indexerWsUri =
     lace.configuration.indexerWsUri ?? cocoaConfig.indexerWsUri;
-  // Prefer the locally-configured proof server over Lace's recommendation:
-  // the public preprod proof server doesn't serve CORS headers, so the
-  // browser blocks it. `just up` brings up the docker proof server at
-  // localhost:6300 by default. Override with VITE_PROOF_SERVER_URI for
-  // alternative deployments.
+  // Use whichever URL is configured in `cocoaConfig` (Midnight's public
+  // preprod proof-server by default; see network.ts). Lace's deprecated
+  // `proverServerUri` is ignored — the wallet now does its own proving
+  // inside `balanceUnsealedTransaction` via `getProvingProvider`.
   const proofServerUri = cocoaConfig.proofServerUri;
 
   const zkConfigProvider = new FetchZkConfigProvider<CocoaCircuitId>(

@@ -48,17 +48,15 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Standalone proof-server. The dapp can't talk to the public preprod
-# proof-server directly (no CORS), so we ship our own and expose it
-# at proof-server.<domain> with CORS annotations on the ingress. Runs
-# as its own Deployment/Service/Ingress so SPA rolls don't restart
-# the slow-starting proof-server (BLS param fetch from S3 on first
-# boot can take ~2 min) and we can scale them independently.
+# Self-hosted proof-server. Off by default — Midnight Foundation's
+# public preprod proof-server (https://proof-server.preprod.midnight.
+# network) now returns CORS headers for arbitrary browser origins and
+# runs an unpublished 8.x build matching ledger-v8's wire format, so
+# the dapp talks to it directly (see ui/src/lib/network.ts). Templates
+# stay around in case we ever need to self-host again (e.g. for a
+# private network); flip this on and set `proofServer.ingress.host`.
 proofServer:
-  # On by default for staging/prod. Testflight overrides to `false`
-  # because the proof-server's cold start can push a fresh-namespace
-  # install past helm's 600s wait timeout.
-  enabled: true
+  enabled: false
   replicaCount: 1
   image:
     repository: midnightnetwork/proof-server

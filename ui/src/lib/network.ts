@@ -23,15 +23,6 @@ export type CocoaConfig = {
 const fromEnv = (key: string, fallback: string): string =>
   (import.meta.env?.[key] as string | undefined) ?? fallback;
 
-const deriveProofServerUri = (): string => {
-  if (typeof window === "undefined") return "http://localhost:5173/proof-server";
-  const { hostname, protocol, origin } = window.location;
-  if (hostname.startsWith("app.")) {
-    return `${protocol}//proof-server.${hostname.slice("app.".length)}`;
-  }
-  return `${origin}/proof-server`;
-};
-
 export const cocoaConfig: CocoaConfig = {
   // Midnight's networkId enum values in 4.x: "undeployed" | "mainnet"
   // | "preview" | "preprod". Default to `preprod` since that's where the
@@ -39,22 +30,23 @@ export const cocoaConfig: CocoaConfig = {
   networkId: fromEnv("VITE_NETWORK_ID", "preprod"),
   indexerUri: fromEnv(
     "VITE_INDEXER_URI",
-    "https://indexer.testnet-02.midnight.network/api/v1/graphql",
+    "https://indexer.preprod.midnight.network/api/v4/graphql",
   ),
   indexerWsUri: fromEnv(
     "VITE_INDEXER_WS_URI",
-    "wss://indexer.testnet-02.midnight.network/api/v1/graphql/ws",
+    "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
   ),
-  // Production: SPA is at app.<domain>, proof-server at proof-server.<domain>
-  // — same root domain, different subdomain, with CORS allowed by the
-  // proof-server's ingress (see `proofServer.ingress.annotations` in
-  // charts/cocoa-monster/values.yaml). Local dev (any non-`app.*` host)
-  // falls back to the same-origin `/proof-server` path proxied by
-  // vite.config.ts to localhost:6300. Override end-to-end with
-  // VITE_PROOF_SERVER_URI.
+  // Midnight Foundation's public preprod proof-server. Returns CORS
+  // headers for arbitrary browser origins and tracks the ledger-v8
+  // wire format (it reports version 8.0.3, matching our ledger-v8
+  // dependency). We used to self-host an older `midnightnetwork/
+  // proof-server:latest` (stuck at 7.0.0-rc.1, no published 8.x image),
+  // but that introduced wire-format skew with ledger-v8. Override with
+  // VITE_PROOF_SERVER_URI for local dev against `just up`'s docker
+  // proof-server.
   proofServerUri: fromEnv(
     "VITE_PROOF_SERVER_URI",
-    deriveProofServerUri(),
+    "https://proof-server.preprod.midnight.network",
   ),
   // FetchZkConfigProvider serves keys at `${baseURL}/keys/{circuit}.prover`
   // and zkir at `${baseURL}/zkir/{circuit}.bzkir`. We symlink the
