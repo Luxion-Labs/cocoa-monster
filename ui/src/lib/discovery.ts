@@ -16,76 +16,86 @@ export type DiscoveredMarket = KnownMarket & {
 };
 
 /**
- * Query the indexer for all deployed Cocoa contracts. This scans the
- * blockchain for contract deployments and returns their current state.
+ * Fetch current state for known markets from the indexer.
  * 
- * Note: This is a simple implementation that queries recent contracts.
- * For production, you'd want to:
- * - Cache results
- * - Paginate through all contracts
- * - Filter by contract bytecode hash to identify Cocoa contracts specifically
+ * Since the Midnight Indexer v4 doesn't provide a "list all contracts" query,
+ * we query each known market individually to get its current state.
+ * 
+ * @param knownAddresses Array of contract addresses to query
+ * @throws Error if the indexer query fails
  */
-export const discoverMarkets = async (): Promise<DiscoveredMarket[]> => {
-  try {
-    const provider = indexerPublicDataProvider(
-      cocoaConfig.indexerUri,
-      cocoaConfig.indexerWsUri,
-    );
+export const fetchMarketStates = async (
+  knownAddresses: string[],
+): Promise<DiscoveredMarket[]> => {
+  if (knownAddresses.length === 0) {
+    return [];
+  }
 
-    // Query for recent contract states. The indexer's GraphQL API
-    // provides `contractStates` which returns all known contracts.
-    // We'll fetch the most recent ones and decode their state.
-    const query = `
-      query RecentContracts {
-        contractStates(first: 100, orderBy: BLOCK_HEIGHT_DESC) {
-          nodes {
-            contractAddress
-            data
-            blockHeight
+  const markets: DiscoveredMarket[] = [];
+
+  // Query each contract's current state
+  for (const address of knownAddresses) {
+    try {
+      const query = `
+        query GetContractState($address: HexEncoded!) {
+          contractAction(address: $address) {
+            __typename
+            address
+            state
           }
         }
+      `;
+
+      const response = await fetch(cocoaConfig.indexerUri, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          variables: { address },
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`[discovery] Failed to query ${address}: ${response.statusText}`);
+        continue;
       }
-    `;
 
-    const response = await fetch(cocoaConfig.indexerUri, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    });
+      const result = await response.json();
 
-    if (!response.ok) {
-      throw new Error(`Indexer query failed: ${response.statusText}`);
-    }
+      if (result.errors) {
+        console.warn(`[discovery] GraphQL errors for ${address}:`, result.errors);
+        continue;
+      }
 
-    const result = await response.json();
-    const contracts = result?.data?.contractStates?.nodes ?? [];
+      const action = result?.data?.contractAction;
+      if (!action || !action.state) {
+        console.warn(`[discovery] No state found for ${address}`);
+        continue;
+      }
 
-    // Try to decode each contract as a Cocoa contract. If decoding
-    // succeeds, it's likely a Cocoa market.
-    const markets: DiscoveredMarket[] = [];
-    
-    for (const contract of contracts) {
       try {
-        const state = decodeCocoaState(readLedger(contract.data));
+        // Decode the contract state to verify it's a Cocoa contract
+        const state = decodeCocoaState(readLedger(action.state));
         markets.push({
-          contractAddress: contract.contractAddress,
+          contractAddress: address,
           question: state.question,
-          addedAt: Date.now(), // We don't have the actual deploy time
+          addedAt: Date.now(),
           priceYes: state.priceYes,
           status: state.status === 0 ? "OPEN" : "RESOLVED",
           positionCount: state.positionCount,
         });
-      } catch {
-        // Not a Cocoa contract or failed to decode — skip it
+      } catch (err) {
+        console.warn(`[discovery] Failed to decode state for ${address}:`, err);
         continue;
       }
+    } catch (err) {
+      console.warn(`[discovery] Error querying ${address}:`, err);
+      continue;
     }
-
-    return markets;
-  } catch (err) {
-    console.error("[discovery] Failed to discover markets:", err);
-    return [];
   }
+
+  console.log(`[discovery] Fetched state for ${markets.length}/${knownAddresses.length} markets`);
+  return markets;
 };
 
 /**
