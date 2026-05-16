@@ -126,11 +126,19 @@ export class CocoaSimulator {
   }
 
   buy(side: Side, collateralIn: bigint, amountOut: bigint): Uint8Array {
+    // The contract now takes a ShieldedCoinInfo as collateral; for the
+    // simulator we synthesize one of the right shape. Real deploys
+    // have the wallet attach a real coin during tx balancing.
+    const coin = {
+      nonce: randomBytes32(),
+      color: new Uint8Array(32), // nativeToken() — pad(32, "")
+      value: collateralIn,
+    };
     const result = this.contract.circuits.buy(
       this.circuitContext,
       side,
-      collateralIn,
       amountOut,
+      coin,
     );
     this.circuitContext = result.context;
     return result.result;

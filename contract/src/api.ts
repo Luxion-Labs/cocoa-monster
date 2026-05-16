@@ -176,7 +176,16 @@ export class CocoaApi {
   ): Promise<CocoaPosition> {
     const nonce = randomBytes32();
     await this.rotateNonce(nonce);
-    await this.deployed.callTx.buy(side, collateralIn, amountOut);
+    // The contract takes a ShieldedCoinInfo as collateral. We supply
+    // the desc (value + native-token color); the wallet's
+    // `balanceUnsealedTransaction` substitutes a real coin from the
+    // user's wallet at signing time.
+    const coin = {
+      nonce: randomBytes32(),
+      color: new Uint8Array(32), // native NIGHT — pad(32, "")
+      value: collateralIn,
+    };
+    await this.deployed.callTx.buy(side, amountOut, coin);
     const position: CocoaPosition = { side, amount: amountOut, nonce };
     await this.appendOwnedPosition(position);
     return position;
