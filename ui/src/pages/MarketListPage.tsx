@@ -46,6 +46,7 @@ const toPlaceholderMarket = (market: KnownMarket): DiscoveredMarket => ({
   priceYes: 0.5,
   status: "OPEN",
   positionCount: 0n,
+  nullifierCount: 0n,
 });
 
 const mergeKnownMarkets = (...groups: KnownMarket[][]): KnownMarket[] => {
@@ -66,53 +67,56 @@ export const MarketListPage = () => {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadMarkets = async (cancelled = { current: false }) => {
+    setIsLoading(true);
+    setError(null);
 
-    const loadMarkets = async () => {
-      setIsLoading(true);
-      setError(null);
+    try {
+      const local = listKnownMarkets();
+      const shared = await fetchSharedMarkets();
+      const known = mergeKnownMarkets(local, shared);
 
-      try {
-        const local = listKnownMarkets();
-        const shared = await fetchSharedMarkets();
-        const known = mergeKnownMarkets(local, shared);
+      if (known.length > 0 && !cancelled.current) {
+        setMarkets(known.map(toPlaceholderMarket));
+      }
 
-        if (known.length > 0 && !cancelled) {
-          setMarkets(known.map(toPlaceholderMarket));
-        }
+      const addresses = known.map((m) => m.contractAddress);
+      const discovered = await fetchMarketStates(addresses);
 
-        const addresses = known.map((m) => m.contractAddress);
-        const discovered = await fetchMarketStates(addresses);
-
-        if (!cancelled) {
-          if (discovered.length > 0) {
-            const merged = mergeWithLocalMarkets(discovered, known);
-            setMarkets(merged);
-          } else if (known.length === 0) {
-            setMarkets([]);
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error("[market-list] Failed to fetch market states:", err);
-          setError(err instanceof Error ? err.message : String(err));
-          const local = listKnownMarkets();
-          setMarkets(local.map(toPlaceholderMarket));
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
+      if (!cancelled.current) {
+        if (discovered.length > 0) {
+          const merged = mergeWithLocalMarkets(discovered, known);
+          setMarkets(merged);
+        } else if (known.length === 0) {
+          setMarkets([]);
         }
       }
-    };
+    } catch (err) {
+      if (!cancelled.current) {
+        console.error("[market-list] Failed to fetch market states:", err);
+        setError(err instanceof Error ? err.message : String(err));
+        const local = listKnownMarkets();
+        setMarkets(local.map(toPlaceholderMarket));
+      }
+    } finally {
+      if (!cancelled.current) {
+        setIsLoading(false);
+      }
+    }
+  };
 
-    loadMarkets();
+  useEffect(() => {
+    const cancelled = { current: false };
+    loadMarkets(cancelled);
 
     return () => {
-      cancelled = true;
+      cancelled.current = true;
     };
   }, []);
+
+  const handleReload = () => {
+    loadMarkets();
+  };
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredMarkets = markets.filter((market) => {
@@ -139,9 +143,18 @@ export const MarketListPage = () => {
           <p className="market-list__eyebrow">Prediction markets</p>
           <h1>Trade what the world is watching.</h1>
         </div>
-        <Link to="/create" className="btn btn--primary market-list__create">
-          New market
-        </Link>
+        <div className="market-list__hero-actions">
+          <button
+            className="btn btn--ghost market-list__reload"
+            onClick={handleReload}
+            disabled={isLoading}
+          >
+            {isLoading ? "Refreshing..." : "Refresh"}
+          </button>
+          <Link to="/create" className="btn btn--primary market-list__create">
+            New market
+          </Link>
+        </div>
       </header>
 
       <div className="market-list__toolbar" role="search">
@@ -201,9 +214,18 @@ export const MarketListPage = () => {
           <p>
             Deploy a market or connect the shared oracle registry.
           </p>
-          <Link to="/create" className="btn btn--primary">
-            New market
-          </Link>
+          <div className="empty-state__actions">
+            <button
+              className="btn btn--ghost"
+              onClick={handleReload}
+              disabled={isLoading}
+            >
+              {isLoading ? "Refreshing..." : "Refresh"}
+            </button>
+            <Link to="/create" className="btn btn--primary">
+              New market
+            </Link>
+          </div>
         </div>
       ) : (
         <>

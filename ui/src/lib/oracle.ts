@@ -198,7 +198,9 @@ export const fetchOracleResolution = async (
 export const fetchOracleMarkets = async (): Promise<
   Array<{ contractAddress: string; question: string; addedAt?: number }>
 > => {
-  const response = await fetch(`${oracleBaseUrl()}/oracle/markets`);
+  const response = await fetch(`${oracleBaseUrl()}/oracle/markets`, {
+    cache: "no-store",
+  });
   if (!response.ok) {
     throw new Error(`oracle registry returned ${response.status}`);
   }

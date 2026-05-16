@@ -216,6 +216,13 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   line-height: 0.98;
 }
 
+.market-list__hero-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
 .market-list__create {
   flex: 0 0 auto;
 }
@@ -444,6 +451,12 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   align-items: center;
   gap: 1rem;
   border: 1px solid var(--border);
+}
+
+.empty-state__actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .empty-state h2 {
