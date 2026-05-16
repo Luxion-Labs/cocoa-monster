@@ -10,6 +10,7 @@ import { ResolvePanel } from "../components/ResolvePanel";
 import { WalletConnect } from "../components/WalletConnect";
 import { useCocoaApi } from "../hooks/useCocoaApi";
 import { useCocoaState } from "../hooks/useCocoaState";
+import { useReadOnlyMarketState } from "../hooks/useReadOnlyMarketState";
 import { useWallet } from "../hooks/useWallet";
 import { useWalletBalances } from "../hooks/useWalletBalances";
 import { formatBigInt, formatPriceYes, formatStatus, truncateAddress } from "../lib/format";
@@ -32,7 +33,14 @@ export const MarketDetailPage = () => {
   );
   const apiState = useCocoaApi(providers, address ?? null);
   const api = apiState.kind === "ready" ? apiState.api : null;
-  const { state, priceHistory, error: streamError } = useCocoaState(api);
+  
+  // Use connected API state if available, otherwise use read-only state
+  const connectedState = useCocoaState(api);
+  const readOnlyState = useReadOnlyMarketState(wallet.connection ? null : address ?? null);
+  
+  const { state, priceHistory, error: streamError } = wallet.connection 
+    ? connectedState 
+    : readOnlyState;
 
   // Once we know the question, persist this market in the local address book
   // so MarketListPage can show it.
@@ -114,6 +122,18 @@ export const MarketDetailPage = () => {
             </dl>
           </div>
           <aside className="market-detail__side">
+            {!wallet.connection && state?.status === Status.OPEN && (
+              <div className="market-detail__connect-prompt">
+                <p>Connect your wallet to place bets</p>
+                <button
+                  onClick={wallet.connect}
+                  className="btn btn--primary"
+                  disabled={wallet.status.kind === "connecting"}
+                >
+                  {wallet.status.kind === "connecting" ? "Connecting..." : "Connect Wallet"}
+                </button>
+              </div>
+            )}
             {api && state.status === Status.OPEN && (
               <BetForm api={api} state={state} />
             )}
