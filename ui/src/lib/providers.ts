@@ -35,6 +35,30 @@ const fromHex = (hex: string): Uint8Array => {
 };
 
 /**
+ * Build read-only providers for viewing market state without a wallet connection.
+ * This allows users to browse markets and see prices before connecting their wallet.
+ */
+export const buildReadOnlyProviders = (): Partial<CocoaProviders> => {
+  ensureNetwork();
+  
+  const zkConfigProvider = new FetchZkConfigProvider<CocoaCircuitId>(
+    cocoaConfig.zkConfigBaseUri,
+    typeof window === "undefined"
+      ? (fetch as typeof fetch)
+      : window.fetch.bind(window),
+  );
+
+  return {
+    publicDataProvider: indexerPublicDataProvider(
+      cocoaConfig.indexerUri,
+      cocoaConfig.indexerWsUri,
+    ),
+    zkConfigProvider,
+    proofProvider: httpClientProofProvider(cocoaConfig.proofServerUri, zkConfigProvider),
+  };
+};
+
+/**
  * Build the full set of providers a Lace 4.x connection needs to deploy
  * or call the Cocoa contract on Midnight TestNet.
  *
