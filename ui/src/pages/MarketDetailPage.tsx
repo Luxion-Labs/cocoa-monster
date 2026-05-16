@@ -11,6 +11,7 @@ import { WalletConnect } from "../components/WalletConnect";
 import { useCocoaApi } from "../hooks/useCocoaApi";
 import { useCocoaState } from "../hooks/useCocoaState";
 import { useWallet } from "../hooks/useWallet";
+import { useWalletBalances } from "../hooks/useWalletBalances";
 import { formatBigInt, formatPriceYes, formatStatus, truncateAddress } from "../lib/format";
 import { rememberMarket } from "../lib/markets";
 import { buildCocoaProviders } from "../lib/providers";
@@ -18,6 +19,12 @@ import { buildCocoaProviders } from "../lib/providers";
 export const MarketDetailPage = () => {
   const { address } = useParams<{ address: string }>();
   const wallet = useWallet();
+
+  const connectedApi =
+    wallet.status.kind === "connected"
+      ? wallet.status.connection.connected
+      : null;
+  const { balances, isLoading: isLoadingBalances, refresh } = useWalletBalances(connectedApi);
 
   const providers = useMemo(
     () => (wallet.connection ? buildCocoaProviders(wallet.connection) : null),
@@ -52,8 +59,11 @@ export const MarketDetailPage = () => {
         </div>
         <WalletConnect
           status={wallet.status}
+          balances={balances}
+          isLoadingBalances={isLoadingBalances}
           onConnect={wallet.connect}
           onDisconnect={wallet.disconnect}
+          onRefreshBalances={refresh}
         />
       </header>
 

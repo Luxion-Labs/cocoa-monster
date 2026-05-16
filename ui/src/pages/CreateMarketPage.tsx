@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useWallet } from "../hooks/useWallet";
+import { useWalletBalances } from "../hooks/useWalletBalances";
 import { buildCocoaProviders } from "../lib/providers";
 import { rememberMarket } from "../lib/markets";
 import { explainError } from "../lib/errors";
@@ -13,6 +14,12 @@ const DEFAULT_LIQUIDITY = "1000";
 export const CreateMarketPage = () => {
   const wallet = useWallet();
   const navigate = useNavigate();
+  const connectedApi =
+    wallet.status.kind === "connected"
+      ? wallet.status.connection.connected
+      : null;
+  const { balances, isLoading: isLoadingBalances, refresh } = useWalletBalances(connectedApi);
+  
   const [question, setQuestion] = useState("");
   const [liquidity, setLiquidity] = useState(DEFAULT_LIQUIDITY);
   const [closeAt, setCloseAt] = useState<string>(() => {
@@ -104,8 +111,11 @@ export const CreateMarketPage = () => {
           <p>Connect a Lace wallet to deploy a new market.</p>
           <WalletConnect
             status={wallet.status}
+            balances={balances}
+            isLoadingBalances={isLoadingBalances}
             onConnect={wallet.connect}
             onDisconnect={wallet.disconnect}
+            onRefreshBalances={refresh}
           />
         </div>
       ) : (
