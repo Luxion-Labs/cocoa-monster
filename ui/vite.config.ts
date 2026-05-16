@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
-import { nodePolyfills } from "vite-plugin-node-polyfills";
 import { fileURLToPath } from "node:url";
 
 export default defineConfig({
@@ -10,20 +9,7 @@ export default defineConfig({
   build: {
     target: "esnext",
   },
-  plugins: [
-    react(),
-    wasm(),
-    topLevelAwait(),
-    // levelPrivateStateProvider → abstract-level → require('events')
-    // and friends; without this, EventEmitter resolves to undefined and
-    // every class extending it dies at module init. The polyfill set is
-    // narrow (just what midnight-js + level transitively need) so we
-    // keep the bundle from ballooning.
-    nodePolyfills({
-      include: ["events", "buffer", "process", "util"],
-      globals: { Buffer: true, process: true, global: true },
-    }),
-  ],
+  plugins: [react(), wasm(), topLevelAwait()],
   optimizeDeps: {
     esbuildOptions: {
       target: "esnext",
@@ -41,6 +27,13 @@ export default defineConfig({
       "@midnight-ntwrk/compact-runtime": fileURLToPath(
         new URL("./src/lib/compact-runtime-shim.ts", import.meta.url),
       ),
+      // levelPrivateStateProvider → abstract-level → require('events').
+      // Vite externalizes Node built-ins for browser builds, leaving
+      // EventEmitter undefined and crashing every `class extends` site
+      // at module init. Aliasing to the npm `events` polyfill resolves it
+      // without needing vite-plugin-node-polyfills (which injects a
+      // `global` shim that interferes with Lace's window.midnight detection).
+      events: "events/",
     },
     dedupe: ["react", "react-dom"],
   },
