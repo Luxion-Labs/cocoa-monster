@@ -34,7 +34,8 @@ ingress:
   enabled: false
   className: nginx
   host: ""
-  annotations: {}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
 
 # Extra envs forwarded to the nginx container — the static bundle is
 # already baked at build time, so these are mostly diagnostic
