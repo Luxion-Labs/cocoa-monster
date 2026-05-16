@@ -9,6 +9,33 @@ export type PreparedOracle = {
   readonly oraclePubKey: Uint8Array;
 };
 
+export type OracleOutcome = "YES" | "NO";
+export type OracleStatus =
+  | "OPEN"
+  | "AWAITING_PROPOSAL"
+  | "PROPOSED"
+  | "DISPUTED"
+  | "FINALIZED";
+
+export type OracleMarket = {
+  readonly contractAddress: string;
+  readonly question: string;
+  readonly closeTime: string;
+  readonly oraclePubKey: string;
+  readonly oracleStatus: OracleStatus;
+  readonly registeredAt?: string;
+  readonly proposedOutcome?: OracleOutcome;
+  readonly proposedAt?: number;
+  readonly proposalDeadline?: number;
+  readonly proposer?: string;
+  readonly evidenceUrl?: string;
+  readonly disputedAt?: number;
+  readonly disputer?: string;
+  readonly disputeReason?: string;
+  readonly finalOutcome?: OracleOutcome;
+  readonly finalizedAt?: number;
+};
+
 const hexToBytes = (hex: string): Uint8Array => {
   if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
     throw new Error("Oracle returned an invalid public key");
@@ -31,6 +58,19 @@ const postJson = async <T>(path: string, body: unknown): Promise<T> => {
     throw new Error(payload.error ?? `Oracle request failed: ${response.status}`);
   }
   return payload;
+};
+
+const parseMarketPayload = (payload: { market?: unknown }): OracleMarket => {
+  const market = payload.market as Partial<OracleMarket> | undefined;
+  if (
+    !market ||
+    typeof market.contractAddress !== "string" ||
+    typeof market.question !== "string" ||
+    typeof market.oracleStatus !== "string"
+  ) {
+    throw new Error("Oracle returned an invalid market");
+  }
+  return market as OracleMarket;
 };
 
 export const prepareOracle = async (input: {
@@ -64,6 +104,53 @@ export const registerOracleMarket = async (input: {
   });
 };
 
+export const fetchOracleMarket = async (
+  contractAddress: string,
+): Promise<OracleMarket | null> => {
+  const response = await fetch(
+    `${oracleBaseUrl()}/oracle/markets/${encodeURIComponent(contractAddress)}`,
+  );
+  if (response.status === 404) return null;
+  const payload = (await response.json()) as { market?: unknown; error?: string };
+  if (!response.ok) {
+    throw new Error(payload.error ?? `oracle market returned ${response.status}`);
+  }
+  return parseMarketPayload(payload);
+};
+
+export const proposeOracleOutcome = async (input: {
+  contractAddress: string;
+  outcome: OracleOutcome;
+  evidenceUrl?: string;
+  proposer?: string;
+}): Promise<OracleMarket> =>
+  parseMarketPayload(
+    await postJson("/oracle/propose", {
+      contractAddress: input.contractAddress,
+      outcome: input.outcome,
+      evidenceUrl: input.evidenceUrl,
+      proposer: input.proposer,
+    }),
+  );
+
+export const disputeOracleOutcome = async (input: {
+  contractAddress: string;
+  reason?: string;
+  disputer?: string;
+}): Promise<OracleMarket> =>
+  parseMarketPayload(
+    await postJson("/oracle/dispute", {
+      contractAddress: input.contractAddress,
+      reason: input.reason,
+      disputer: input.disputer,
+    }),
+  );
+
+export const finalizeOracleOutcome = async (
+  contractAddress: string,
+): Promise<OracleMarket> =>
+  parseMarketPayload(await postJson("/oracle/finalize", { contractAddress }));
+
 export const fetchOracleMarkets = async (): Promise<
   Array<{ contractAddress: string; question: string; addedAt?: number }>
 > => {
@@ -72,12 +159,7 @@ export const fetchOracleMarkets = async (): Promise<
     throw new Error(`oracle registry returned ${response.status}`);
   }
   const payload = (await response.json()) as {
-    markets?: Array<{
-      contractAddress?: unknown;
-      question?: unknown;
-      registeredAt?: unknown;
-      createdAt?: unknown;
-    }>;
+    markets?: Array<Partial<OracleMarket> & { createdAt?: unknown }>;
   };
   if (!Array.isArray(payload.markets)) return [];
 

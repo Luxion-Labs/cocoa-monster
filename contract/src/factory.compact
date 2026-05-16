@@ -1,0 +1,34 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+export struct MarketInfo {
+  question: Opaque<"string">;
+  closeTime: Uint<64>;
+  oraclePubKey: Bytes<32>;
+  createdAt: Uint<64>;
+}
+
+export ledger markets: Map<Bytes<32>, MarketInfo>;
+export ledger marketAddresses: Set<Bytes<32>>;
+
+constructor() {}
+
+export circuit registerMarket(
+  marketAddress: Bytes<32>,
+  question: Opaque<"string">,
+  closeTime: Uint<64>,
+  oraclePubKey: Bytes<32>,
+  createdAt: Uint<64>,
+): [] {
+  const publicAddress = disclose(marketAddress);
+  assert(!markets.member(publicAddress), "market already registered");
+  const info = MarketInfo {
+    question: disclose(question),
+    closeTime: disclose(closeTime),
+    oraclePubKey: disclose(oraclePubKey),
+    createdAt: disclose(createdAt),
+  };
+  markets.insert(publicAddress, info);
+  marketAddresses.insert(publicAddress);
+}

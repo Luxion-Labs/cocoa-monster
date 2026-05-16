@@ -126,7 +126,12 @@ export class CocoaSimulator {
     return readLedger(this.circuitContext.currentQueryContext.state);
   }
 
-  buy(side: Side, stakeIn: bigint, amountOut: bigint): bigint {
+  buy(
+    side: Side,
+    stakeIn: bigint,
+    amountOut: bigint,
+    nowTs = this.ledger().closeTime - 1n,
+  ): bigint {
     this.circuitContext = {
       ...this.circuitContext,
       currentPrivateState: {
@@ -139,9 +144,15 @@ export class CocoaSimulator {
       side,
       amountOut,
       stakeIn,
+      nowTs,
     );
     this.circuitContext = result.context;
     return result.result;
+  }
+
+  close(nowTs: bigint): void {
+    const result = this.contract.circuits.close(this.circuitContext, nowTs);
+    this.circuitContext = result.context;
   }
 
   resolve(side: Side, nowTs: bigint): void {

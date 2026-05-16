@@ -6,7 +6,7 @@ import type { KnownMarket } from "../lib/markets";
 type Props = {
   market: KnownMarket;
   priceYes?: number;
-  status?: "OPEN" | "RESOLVED";
+  status?: "OPEN" | "CLOSED" | "RESOLVED";
   category?: string;
   positionCount?: bigint;
   volumeLabel?: string;
@@ -31,7 +31,7 @@ export const MarketCard = ({
         <span
           className={`market-card__status market-card__status--${status.toLowerCase()}`}
         >
-          {status === "OPEN" ? "Open" : "Resolved"}
+          {status === "OPEN" ? "Open" : status === "CLOSED" ? "Closed" : "Resolved"}
         </span>
       )}
     </div>

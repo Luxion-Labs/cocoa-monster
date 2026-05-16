@@ -42,6 +42,18 @@ export const ResolvePanel = ({ api, state }: Props) => {
     }
   };
 
+  const close = async (): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.close(nowSeconds());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (state.status === Status.RESOLVED) {
     return (
       <div className="resolve-panel resolve-panel--resolved" data-testid="resolve-panel">
@@ -53,16 +65,39 @@ export const ResolvePanel = ({ api, state }: Props) => {
     );
   }
 
-  const closed = nowSeconds() >= state.closeTime;
+  if (state.status === Status.OPEN) {
+    const closed = nowSeconds() >= state.closeTime;
+    return (
+      <div className="resolve-panel" data-testid="resolve-panel">
+        <h3>Oracle</h3>
+        <p>
+          Closes <strong>{formatUnixSeconds(state.closeTime)}</strong>. After
+          close, anyone can stop trading before the oracle finalizes.
+        </p>
+        <button
+          type="button"
+          onClick={() => void close()}
+          disabled={!closed || submitting}
+          className="btn btn--ghost"
+        >
+          {submitting ? "Closing..." : "Close market"}
+        </button>
+        {error && (
+          <p className="resolve-panel__error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   if (isOracle === false) {
     return (
       <div className="resolve-panel" data-testid="resolve-panel">
         <h3>Oracle</h3>
         <p>
-          Closes <strong>{formatUnixSeconds(state.closeTime)}</strong>. The
-          market's trusted oracle resolves it from their device once the
-          close time passes.
+          Trading is closed. The optimistic oracle can propose an outcome, then
+          the trusted resolver submits the finalized answer on-chain.
         </p>
       </div>
     );
@@ -79,8 +114,8 @@ export const ResolvePanel = ({ api, state }: Props) => {
       <div className="resolve-panel__buttons">
         <button
           type="button"
-          onClick={() => resolve(Side.YES)}
-          disabled={!closed || submitting}
+          onClick={() => void resolve(Side.YES)}
+          disabled={submitting}
           className="btn btn--primary"
           data-testid="resolve-panel-resolve-yes"
         >
@@ -88,19 +123,14 @@ export const ResolvePanel = ({ api, state }: Props) => {
         </button>
         <button
           type="button"
-          onClick={() => resolve(Side.NO)}
-          disabled={!closed || submitting}
+          onClick={() => void resolve(Side.NO)}
+          disabled={submitting}
           className="btn btn--ghost"
           data-testid="resolve-panel-resolve-no"
         >
           Resolve NO
         </button>
       </div>
-      {!closed && (
-        <p className="resolve-panel__hint">
-          Closes <strong>{formatUnixSeconds(state.closeTime)}</strong>.
-        </p>
-      )}
       {error && (
         <p className="resolve-panel__error" role="alert">
           {error}

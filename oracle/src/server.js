@@ -9,6 +9,7 @@ const host = process.env.ORACLE_HOST ?? "127.0.0.1";
 const port = Number(process.env.ORACLE_PORT ?? "8787");
 const dataDir = process.env.ORACLE_DATA_DIR ?? new URL("../data", import.meta.url).pathname;
 const storePath = join(dataDir, "oracle-store.json");
+const disputeWindowSeconds = Number(process.env.ORACLE_DISPUTE_WINDOW_SECONDS ?? "300");
 
 const bytesToHex = (bytes) =>
   Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -25,6 +26,37 @@ const hexToBytes = (hex) => {
 };
 
 const emptyStore = () => ({ prepared: {}, markets: {} });
+
+const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+const parseOutcome = (value) => {
+  if (value === "YES" || value === "NO") return value;
+  throw new Error("outcome must be YES or NO");
+};
+
+const oracleStatus = (market) => {
+  if (market.finalizedAt) return "FINALIZED";
+  if (market.disputedAt) return "DISPUTED";
+  if (market.proposedAt) return "PROPOSED";
+  const closeTime = Number(market.closeTime);
+  return Number.isFinite(closeTime) && nowSeconds() >= closeTime
+    ? "AWAITING_PROPOSAL"
+    : "OPEN";
+};
+
+const publicMarket = ({ oracleSecret: _secret, ...market }) => ({
+  ...market,
+  oracleStatus: oracleStatus(market),
+});
+
+const requireMarket = (store, contractAddress) => {
+  if (typeof contractAddress !== "string" || contractAddress.trim() === "") {
+    throw new Error("contractAddress is required");
+  }
+  const market = store.markets[contractAddress];
+  if (!market) throw new Error("unknown market");
+  return market;
+};
 
 const loadStore = async () => {
   try {
@@ -102,17 +134,129 @@ const route = async (request, response) => {
       question: typeof body.question === "string" ? body.question : prepared.question,
       closeTime: String(body.closeTime ?? prepared.closeTime),
       registeredAt: new Date().toISOString(),
+      disputeWindowSeconds,
     };
     await saveStore(store);
-    return send(response, 200, { ok: true });
+    return send(response, 200, { market: publicMarket(store.markets[body.contractAddress]) });
   }
 
   if (request.method === "GET" && url.pathname === "/oracle/markets") {
     const store = await loadStore();
-    const markets = Object.values(store.markets).map(
-      ({ oracleSecret: _secret, ...market }) => market,
-    );
+    const markets = Object.values(store.markets).map(publicMarket);
     return send(response, 200, { markets });
+  }
+
+  const marketMatch = url.pathname.match(/^\/oracle\/markets\/([^/]+)$/);
+  if (request.method === "GET" && marketMatch) {
+    const store = await loadStore();
+    const market = store.markets[decodeURIComponent(marketMatch[1])];
+    if (!market) return send(response, 404, { error: "unknown market" });
+    return send(response, 200, { market: publicMarket(market) });
+  }
+
+  if (request.method === "POST" && url.pathname === "/oracle/propose") {
+    const body = await readJson(request);
+    const store = await loadStore();
+    let outcome;
+    try {
+      outcome = parseOutcome(body.outcome);
+    } catch (error) {
+      return send(response, 400, { error: error.message });
+    }
+    let market;
+    try {
+      market = requireMarket(store, body.contractAddress);
+    } catch (error) {
+      return send(response, error.message === "unknown market" ? 404 : 400, {
+        error: error.message,
+      });
+    }
+    if (market.finalizedAt) {
+      return send(response, 409, { error: "market already finalized" });
+    }
+    if (market.proposedAt && !market.disputedAt) {
+      return send(response, 409, { error: "outcome already proposed" });
+    }
+    const closeTime = Number(market.closeTime);
+    if (Number.isFinite(closeTime) && nowSeconds() < closeTime) {
+      return send(response, 409, { error: "market is still open" });
+    }
+    const proposedAt = nowSeconds();
+    Object.assign(market, {
+      proposedOutcome: outcome,
+      proposedAt,
+      proposalDeadline: proposedAt + (market.disputeWindowSeconds ?? disputeWindowSeconds),
+      proposer: typeof body.proposer === "string" ? body.proposer : "oracle",
+      evidenceUrl: typeof body.evidenceUrl === "string" ? body.evidenceUrl : "",
+      disputedAt: undefined,
+      disputer: undefined,
+      disputeReason: undefined,
+    });
+    await saveStore(store);
+    return send(response, 200, { market: publicMarket(market) });
+  }
+
+  if (request.method === "POST" && url.pathname === "/oracle/dispute") {
+    const body = await readJson(request);
+    const store = await loadStore();
+    let market;
+    try {
+      market = requireMarket(store, body.contractAddress);
+    } catch (error) {
+      return send(response, error.message === "unknown market" ? 404 : 400, {
+        error: error.message,
+      });
+    }
+    if (!market.proposedAt) {
+      return send(response, 409, { error: "no proposed outcome to dispute" });
+    }
+    if (market.finalizedAt) {
+      return send(response, 409, { error: "market already finalized" });
+    }
+    if (nowSeconds() > Number(market.proposalDeadline)) {
+      return send(response, 409, { error: "dispute window has ended" });
+    }
+    Object.assign(market, {
+      disputedAt: nowSeconds(),
+      disputer: typeof body.disputer === "string" ? body.disputer : "anonymous",
+      disputeReason: typeof body.reason === "string" ? body.reason : "",
+    });
+    await saveStore(store);
+    return send(response, 200, { market: publicMarket(market) });
+  }
+
+  if (request.method === "POST" && url.pathname === "/oracle/finalize") {
+    const body = await readJson(request);
+    const store = await loadStore();
+    let market;
+    try {
+      market = requireMarket(store, body.contractAddress);
+    } catch (error) {
+      return send(response, error.message === "unknown market" ? 404 : 400, {
+        error: error.message,
+      });
+    }
+    if (!market.proposedAt) {
+      return send(response, 409, { error: "no proposed outcome to finalize" });
+    }
+    if (market.disputedAt) {
+      return send(response, 409, {
+        error: "market is disputed and needs manual arbitration",
+      });
+    }
+    if (nowSeconds() < Number(market.proposalDeadline)) {
+      return send(response, 409, { error: "dispute window is still open" });
+    }
+    Object.assign(market, {
+      finalOutcome: market.proposedOutcome,
+      finalizedAt: nowSeconds(),
+    });
+    await saveStore(store);
+    return send(response, 200, {
+      market: publicMarket(market),
+      nextAction:
+        "submit market.close() if needed, then market.resolve(finalOutcome) from an oracle wallet",
+    });
   }
 
   if (request.method === "POST" && url.pathname === "/oracle/resolve") {

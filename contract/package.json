@@ -13,8 +13,8 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc --project tsconfig.build.json && cp -Rf ./src/managed ./dist/managed && cp ./src/cocoa.compact ./dist",
-    "compact": "compact compile src/cocoa.compact ./src/managed/cocoa",
+    "build": "rm -rf dist && tsc --project tsconfig.build.json && cp -Rf ./src/managed ./dist/managed && cp ./src/cocoa.compact ./src/factory.compact ./dist",
+    "compact": "compact compile src/cocoa.compact ./src/managed/cocoa && compact compile src/factory.compact ./src/managed/factory",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"

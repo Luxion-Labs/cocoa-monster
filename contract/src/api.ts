@@ -31,7 +31,7 @@ import {
 } from "./witnesses.js";
 
 export type CocoaContract = Contract<CocoaPrivateState, Witnesses<CocoaPrivateState>>;
-export type CocoaCircuitId = "buy" | "resolve" | "redeem";
+export type CocoaCircuitId = "buy" | "close" | "resolve" | "redeem";
 export type CocoaProviders = ContractProviders<CocoaContract, CocoaCircuitId, CocoaPrivateState>;
 export type CocoaDeployed = DeployedContract<CocoaContract>;
 export type CocoaFound = FoundContract<CocoaContract>;
@@ -63,6 +63,8 @@ const randomBytes32 = (): Uint8Array => {
   (globalThis.crypto ?? require("node:crypto").webcrypto).getRandomValues(buf);
   return buf;
 };
+
+const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
 /**
  * Contract binding using compact-js's CompiledContract effect builder.
@@ -192,11 +194,20 @@ export class CocoaApi {
   ): Promise<CocoaPosition> {
     const nonce = randomBytes32();
     await this.rotateNonce(nonce);
-    const result = await this.deployed.callTx.buy(side, amountOut, stakeIn);
+    const result = await this.deployed.callTx.buy(
+      side,
+      amountOut,
+      stakeIn,
+      nowSeconds(),
+    );
     const amount = (result as { private: { result: bigint } }).private.result;
     const position: CocoaPosition = { side, amount, nonce };
     await this.appendOwnedPosition(position);
     return position;
+  }
+
+  async close(nowTs: bigint = nowSeconds()): Promise<void> {
+    await this.deployed.callTx.close(nowTs);
   }
 
   async resolve(side: Side, nowTs: bigint): Promise<void> {

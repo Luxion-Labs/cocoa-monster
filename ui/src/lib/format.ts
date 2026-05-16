@@ -13,6 +13,8 @@ export const formatStatus = (status: Status): string => {
   switch (status) {
     case Status.OPEN:
       return "Open";
+    case Status.CLOSED:
+      return "Closed";
     case Status.RESOLVED:
       return "Resolved";
     default:

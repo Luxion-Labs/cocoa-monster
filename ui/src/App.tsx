@@ -3,6 +3,7 @@ import { Link, Route, Routes } from "react-router-dom";
 import { WalletConnect } from "./components/WalletConnect";
 import { useWallet } from "./hooks/useWallet";
 import { CreateMarketPage } from "./pages/CreateMarketPage";
+import { FactoryAdminPage } from "./pages/FactoryAdminPage";
 import { MarketDetailPage } from "./pages/MarketDetailPage";
 import { MarketListPage } from "./pages/MarketListPage";
 import { ShieldNightPage } from "./pages/ShieldNightPage";
@@ -27,6 +28,7 @@ const App = () => {
           <Route path="/" element={<MarketListPage />} />
           <Route path="/create" element={<CreateMarketPage />} />
           <Route path="/m/:address" element={<MarketDetailPage />} />
+          <Route path="/__factory" element={<FactoryAdminPage />} />
           <Route path="/__shield" element={<ShieldNightPage />} />
         </Routes>
       </main>

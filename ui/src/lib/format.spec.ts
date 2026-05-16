@@ -8,7 +8,7 @@ import { vi, describe, expect, it } from "vitest";
 
 vi.mock("cocoa-contract", () => ({
   Side: { YES: 0, NO: 1 },
-  Status: { OPEN: 0, RESOLVED: 1 },
+  Status: { OPEN: 0, CLOSED: 1, RESOLVED: 2 },
 }));
 
 const { Side, Status } = await import("cocoa-contract");
@@ -51,6 +51,9 @@ describe("formatSide", () => {
 describe("formatStatus", () => {
   it("OPEN → Open", () => {
     expect(formatStatus(Status.OPEN)).toBe("Open");
+  });
+  it("CLOSED → Closed", () => {
+    expect(formatStatus(Status.CLOSED)).toBe("Closed");
   });
   it("RESOLVED → Resolved", () => {
     expect(formatStatus(Status.RESOLVED)).toBe("Resolved");

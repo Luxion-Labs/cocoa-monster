@@ -5,14 +5,18 @@
  */
 
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
-import { decodeCocoaState, ledger as readLedger } from "cocoa-contract";
+import {
+  decodeCocoaState,
+  ledger as readLedger,
+  readMarketFactoryLedger,
+} from "cocoa-contract";
 import type { KnownMarket } from "./markets";
 import { cocoaConfig } from "./network";
 import { fetchOracleMarkets } from "./oracle";
 
 export type DiscoveredMarket = KnownMarket & {
   readonly priceYes: number;
-  readonly status: "OPEN" | "RESOLVED";
+  readonly status: "OPEN" | "CLOSED" | "RESOLVED";
   readonly positionCount: bigint;
 };
 
@@ -49,13 +53,66 @@ export const fetchRegistryMarkets = async (): Promise<KnownMarket[]> => {
   }));
 };
 
+export const fetchFactoryMarkets = async (): Promise<KnownMarket[]> => {
+  if (!cocoaConfig.marketFactoryAddress) return [];
+
+  const query = `
+    query GetFactoryState($address: HexEncoded!) {
+      contractAction(address: $address) {
+        __typename
+        address
+        state
+      }
+    }
+  `;
+
+  const response = await fetch(cocoaConfig.indexerUri, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query,
+      variables: { address: cocoaConfig.marketFactoryAddress },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`factory registry returned ${response.status}`);
+  }
+
+  const result = await response.json();
+  if (result.errors) {
+    throw new Error(`factory registry query failed: ${JSON.stringify(result.errors)}`);
+  }
+
+  const state = result?.data?.contractAction?.state;
+  if (!state) return [];
+
+  const ledger = readMarketFactoryLedger(state);
+  return [...ledger.markets]
+    .map(([contractAddress, info]) => ({
+      contractAddress: Array.from(contractAddress, (b) =>
+        b.toString(16).padStart(2, "0"),
+      ).join(""),
+      question: info.question,
+      addedAt: Number(info.createdAt) * 1000,
+    }))
+    .sort((a, b) => b.addedAt - a.addedAt);
+};
+
 export const fetchSharedMarkets = async (): Promise<KnownMarket[]> => {
-  const [registry, oracle] = await Promise.allSettled([
+  const [factory, registry, oracle] = await Promise.allSettled([
+    fetchFactoryMarkets(),
     fetchRegistryMarkets(),
     fetchOracleMarkets(),
   ]);
   const now = Date.now();
   const markets: KnownMarket[] = [];
+
+  if (factory.status === "fulfilled") {
+    markets.push(...factory.value);
+  } else {
+    console.warn("[discovery] Factory registry refresh failed:", factory.reason);
+  }
 
   if (registry.status === "fulfilled") {
     markets.push(...registry.value);
@@ -144,7 +201,12 @@ export const fetchMarketStates = async (
           question: state.question,
           addedAt: Date.now(),
           priceYes: state.priceYes,
-          status: state.status === 0 ? "OPEN" : "RESOLVED",
+          status:
+            state.status === 0
+              ? "OPEN"
+              : state.status === 1
+                ? "CLOSED"
+                : "RESOLVED",
           positionCount: state.positionCount,
         });
       } catch (err) {

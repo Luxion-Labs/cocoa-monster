@@ -4,7 +4,7 @@ import { vi } from "vitest";
 
 vi.mock("cocoa-contract", () => ({
   Side: { YES: 0, NO: 1 },
-  Status: { OPEN: 0, RESOLVED: 1 },
+  Status: { OPEN: 0, CLOSED: 1, RESOLVED: 2 },
   // Recompute YES quote with the same CPMM math as quote.ts so the form
   // still produces realistic numbers without the heavy import chain.
   quoteAmountOut: (
@@ -36,6 +36,7 @@ import { BetForm } from "./BetForm";
 const fakeApi = (impl: Partial<CocoaApi> = {}) =>
   ({
     buy: vi.fn(),
+    close: vi.fn(),
     resolve: vi.fn(),
     redeem: vi.fn(),
     ownedPositions: vi.fn(async () => []),

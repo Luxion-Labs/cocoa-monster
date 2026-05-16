@@ -18,6 +18,8 @@ export type CocoaConfig = {
    * on it at construction time. Defaults to `${origin}/zk-config`.
    */
   readonly zkConfigBaseUri: string;
+  /** Optional canonical market factory/registry contract address. */
+  readonly marketFactoryAddress?: string;
 };
 
 const fromEnv = (key: string, fallback: string): string =>
@@ -54,6 +56,9 @@ export const cocoaConfig: CocoaConfig = {
     "VITE_ZK_CONFIG_URI",
     appOrigin(),
   ),
+  marketFactoryAddress:
+    (import.meta.env?.VITE_MARKET_FACTORY_ADDRESS as string | undefined) ||
+    undefined,
 };
 
 let networkConfigured = false;

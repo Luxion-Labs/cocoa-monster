@@ -109,13 +109,31 @@ describe("Cocoa contract — buy circuit", () => {
 });
 
 describe("Cocoa contract — oracle resolution", () => {
-  it("rejects resolve before closeTime", () => {
+  it("rejects buys at or after closeTime", () => {
     const sim = initial({ closeTime: 1_000n });
-    expect(() => sim.resolve(Side.YES, 500n)).toThrow(/market still open/);
+    expect(() => sim.buy(Side.YES, 100n, 90n, 1_000n)).toThrow(/market closed/);
+  });
+
+  it("rejects close before closeTime", () => {
+    const sim = initial({ closeTime: 1_000n });
+    expect(() => sim.close(500n)).toThrow(/market still open/);
+  });
+
+  it("closes after closeTime", () => {
+    const sim = initial({ closeTime: 1_000n });
+    sim.close(1_000n);
+
+    expect(sim.ledger().status).toBe(Status.CLOSED);
+  });
+
+  it("rejects resolve before close", () => {
+    const sim = initial({ closeTime: 1_000n });
+    expect(() => sim.resolve(Side.YES, 1_000n)).toThrow(/market not closed/);
   });
 
   it("resolves directly when called by the trusted oracle", () => {
     const sim = initial({ closeTime: 1_000n });
+    sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
 
     const l = sim.ledger();
@@ -125,6 +143,7 @@ describe("Cocoa contract — oracle resolution", () => {
 
   it("rejects resolve from a non-oracle caller", () => {
     const sim = initial({ closeTime: 1_000n });
+    sim.close(1_000n);
     // A non-oracle has no witness for `oracleSecret` — feed in a wrong
     // value and the contract recomputes a different pubKey, fails assert.
     sim.setOracleSecret(new Uint8Array(32).fill(0xee));
@@ -133,14 +152,15 @@ describe("Cocoa contract — oracle resolution", () => {
 
   it("rejects double-resolve", () => {
     const sim = initial({ closeTime: 1_000n });
+    sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
-    expect(() => sim.resolve(Side.NO, 1_500n)).toThrow(/market not open/);
+    expect(() => sim.resolve(Side.NO, 1_500n)).toThrow(/market not closed/);
   });
 
-  it("rejects buy after resolve", () => {
+  it("rejects buy after close", () => {
     const sim = initial({ closeTime: 1_000n });
-    sim.resolve(Side.YES, 1_000n);
-    expect(() => sim.buy(Side.YES, 100n, 0n)).toThrow(/market not open/);
+    sim.close(1_000n);
+    expect(() => sim.buy(Side.YES, 100n, 90n, 1_001n)).toThrow(/market not open/);
   });
 });
 
@@ -154,6 +174,7 @@ describe("Cocoa contract — redeem circuit", () => {
   it("rejects redeem on the losing side", () => {
     const sim = initial({ closeTime: 1_000n });
     const amountOut = sim.buy(Side.YES, 100n, 90n);
+    sim.close(1_000n);
     sim.resolve(Side.NO, 1_000n);
 
     expect(() => sim.redeem(Side.YES, amountOut)).toThrow(/wrong side/);
@@ -162,6 +183,7 @@ describe("Cocoa contract — redeem circuit", () => {
   it("rejects redeem when the buyer has no matching position", () => {
     const sim = initial({ closeTime: 1_000n });
     sim.buy(Side.YES, 100n, 90n);
+    sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
 
     // Wrong amount → commitment mismatch.
@@ -171,6 +193,7 @@ describe("Cocoa contract — redeem circuit", () => {
   it("redeems a winning position once and emits a nullifier", () => {
     const sim = initial({ closeTime: 1_000n });
     const amountOut = sim.buy(Side.YES, 100n, 90n);
+    sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
 
     const payout = sim.redeem(Side.YES, amountOut);
@@ -182,6 +205,7 @@ describe("Cocoa contract — redeem circuit", () => {
   it("blocks double-redeem via the nullifier set", () => {
     const sim = initial({ closeTime: 1_000n });
     const amountOut = sim.buy(Side.YES, 100n, 90n);
+    sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
     sim.redeem(Side.YES, amountOut);
 

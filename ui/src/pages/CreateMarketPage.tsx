@@ -1,4 +1,7 @@
-import { deployCocoaMarket } from "cocoa-contract";
+import {
+  deployCocoaMarket,
+  joinMarketFactory,
+} from "cocoa-contract";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,6 +10,7 @@ import { buildCocoaProviders } from "../lib/providers";
 import { rememberMarket } from "../lib/markets";
 import { explainError } from "../lib/errors";
 import { prepareOracle, registerOracleMarket } from "../lib/oracle";
+import { cocoaConfig } from "../lib/network";
 
 const DEFAULT_LIQUIDITY = "1000";
 
@@ -83,6 +87,18 @@ export const CreateMarketPage = () => {
         oraclePubKey: oracle.oraclePubKey,
       });
       console.debug("[cocoa] deployed at", api.contractAddress);
+      if (cocoaConfig.marketFactoryAddress) {
+        const factory = await joinMarketFactory(
+          providers as never,
+          cocoaConfig.marketFactoryAddress,
+        );
+        await factory.registerMarket({
+          contractAddress: api.contractAddress,
+          question: question.trim(),
+          closeTime: closeTimestamp!,
+          oraclePubKey: oracle.oraclePubKey,
+        });
+      }
       await registerOracleMarket({
         oracleId: oracle.oracleId,
         contractAddress: api.contractAddress,

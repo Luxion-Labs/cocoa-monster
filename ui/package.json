@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sync-zk-config": "mkdir -p public && rm -rf public/keys public/zkir && cp -r ../contract/src/managed/cocoa/keys public/keys && cp -r ../contract/src/managed/cocoa/zkir public/zkir",
+    "sync-zk-config": "mkdir -p public/keys public/zkir && rm -rf public/keys/* public/zkir/* && cp -r ../contract/src/managed/cocoa/keys/. public/keys/ && cp -r ../contract/src/managed/cocoa/zkir/. public/zkir/ && cp -r ../contract/src/managed/factory/keys/. public/keys/ && cp -r ../contract/src/managed/factory/zkir/. public/zkir/",
     "dev": "npm run sync-zk-config && vite --host 0.0.0.0",
     "predev": "npm run sync-zk-config",
     "build": "npm run sync-zk-config && tsc && vite build",

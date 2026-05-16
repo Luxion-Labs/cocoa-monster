@@ -752,6 +752,78 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   font-size: 0.85rem;
 }
 
+.oracle-panel,
+.factory-admin__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.oracle-panel h3,
+.factory-admin__panel h3 {
+  margin: 0;
+}
+
+.oracle-panel p,
+.factory-admin__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.oracle-panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.oracle-panel__buttons,
+.factory-admin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.oracle-panel input,
+.factory-admin input {
+  min-height: 42px;
+  padding: 0 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+}
+
+.oracle-panel__error {
+  color: var(--danger);
+  background: rgba(238, 79, 90, 0.12);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.factory-admin__markets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.factory-admin__markets li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+
 @media (max-width: 640px) {
   .shield-page__balances {
     grid-template-columns: 1fr;

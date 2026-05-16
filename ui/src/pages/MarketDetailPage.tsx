@@ -5,6 +5,7 @@ import { Status } from "cocoa-contract";
 
 import { BetForm } from "../components/BetForm";
 import { ClaimPanel } from "../components/ClaimPanel";
+import { OptimisticOraclePanel } from "../components/OptimisticOraclePanel";
 import { PriceChart } from "../components/PriceChart";
 import { ResolvePanel } from "../components/ResolvePanel";
 import { useCocoaApi } from "../hooks/useCocoaApi";
@@ -126,6 +127,9 @@ export const MarketDetailPage = () => {
               />
             )}
             {api && <ResolvePanel api={api} state={state} />}
+            {address && (
+              <OptimisticOraclePanel contractAddress={address} state={state} />
+            )}
           </aside>
         </div>
       ) : (

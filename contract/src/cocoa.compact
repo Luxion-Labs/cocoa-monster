@@ -3,7 +3,7 @@ pragma language_version >= 0.20;
 import CompactStandardLibrary;
 
 export enum Side { YES, NO }
-export enum Status { OPEN, RESOLVED }
+export enum Status { OPEN, CLOSED, RESOLVED }
 
 // ----------------- Public market state -----------------
 export ledger question: Opaque<"string">;
@@ -24,9 +24,8 @@ export ledger reserveNo: Uint<64>;
 export ledger pool: Uint<64>;
 export ledger volume: Uint<64>;
 
-// Lifecycle. With a single trusted signer there is no dispute window —
-// a market goes straight from OPEN to RESOLVED when the oracle calls
-// `resolve`.
+// Lifecycle. Markets trade while OPEN, stop accepting buys when CLOSED,
+// and pay winning positions after the oracle moves them to RESOLVED.
 export ledger status: Status;
 export ledger outcome: Side;
 
@@ -60,8 +59,10 @@ witness oracleSecret(): Bytes<32>;
 // Buy outcome exposure of `side` with real unshielded NIGHT. `amountOut` is
 // the UI's CPMM quote used to update visible odds; the redeemable position
 // amount is the actual NIGHT stake paid into the contract pool.
-export circuit buy(side: Side, amountOut: Uint<64>, stakeAmount: Uint<64>): Uint<64> {
+export circuit buy(side: Side, amountOut: Uint<64>, stakeAmount: Uint<64>, nowTs: Uint<64>): Uint<64> {
   assert(status == Status.OPEN, "market not open");
+  const publicNow = disclose(nowTs);
+  assert(publicNow < closeTime, "market closed");
   const publicStake = disclose(stakeAmount);
   const publicAmount = disclose(amountOut);
   assert(publicStake > 0, "stake must be positive");
@@ -97,14 +98,22 @@ export circuit buy(side: Side, amountOut: Uint<64>, stakeAmount: Uint<64>): Uint
 
 // ----------------- Resolution -----------------
 
+// Anyone can close the market after `closeTime`. This makes the end of
+// trading explicit on-chain before the optimistic oracle finalizes.
+export circuit close(nowTs: Uint<64>): [] {
+  assert(status == Status.OPEN, "market not open");
+  const publicNow = disclose(nowTs);
+  assert(publicNow >= closeTime, "market still open");
+  status = Status.CLOSED;
+}
+
 // Trusted oracle resolves the market in a single step. The circuit
 // recomputes `H("cocoa:oracle:" || oracleSecret)` from the witness and
 // asserts it matches the on-chain `oraclePubKey`. Anyone who is not the
 // oracle has no witness for `oracleSecret` and the assertion fails.
 export circuit resolve(side: Side, nowTs: Uint<64>): [] {
-  assert(status == Status.OPEN, "market not open");
+  assert(status == Status.CLOSED, "market not closed");
   const publicNow = disclose(nowTs);
-  assert(publicNow >= closeTime, "market still open");
   const sk = oracleSecret();
   const expected = disclose(oracleCommitment(sk));
   assert(expected == oraclePubKey, "not the oracle");

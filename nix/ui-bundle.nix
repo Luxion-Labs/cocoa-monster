@@ -47,6 +47,7 @@ pkgs.buildNpmPackage {
     # has no network, so seed the cache from the pre-fetched FODs.
     mkdir -p "$HOME/.cache/midnight/zk-params"
     install -m644 ${zkParams.bls_midnight_2p9}  "$HOME/.cache/midnight/zk-params/bls_midnight_2p9"
+    install -m644 ${zkParams.bls_midnight_2p10} "$HOME/.cache/midnight/zk-params/bls_midnight_2p10"
     install -m644 ${zkParams.bls_midnight_2p13} "$HOME/.cache/midnight/zk-params/bls_midnight_2p13"
     install -m644 ${zkParams.bls_midnight_2p14} "$HOME/.cache/midnight/zk-params/bls_midnight_2p14"
     install -m644 ${zkParams.bls_midnight_2p16} "$HOME/.cache/midnight/zk-params/bls_midnight_2p16"
