@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
 import { buildCocoaProviders } from "../lib/providers";
 import { rememberMarket } from "../lib/markets";
+import { explainError } from "../lib/errors";
 import { WalletConnect } from "../components/WalletConnect";
 
 const DEFAULT_LIQUIDITY = "1000";
@@ -87,7 +88,7 @@ export const CreateMarketPage = () => {
       navigate(`/m/${api.contractAddress}`);
     } catch (err) {
       console.error("[cocoa] deploy failed:", err);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(explainError(err));
     } finally {
       setSubmitting(false);
     }

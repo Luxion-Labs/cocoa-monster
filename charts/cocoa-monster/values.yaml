@@ -49,6 +49,27 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# Sidecar proof-server. The dapp can't talk to the public preprod
+# proof-server directly (no CORS), so we ship our own. The nginx in the
+# main pod proxies `/proof-server/*` here at the same origin as the
+# SPA. Disable for testflight where we only smoke-test pod readiness.
+proofServer:
+  # On by default for staging/prod. Testflight overrides to `false`
+  # because the proof-server's cold start (BLS param fetch from S3)
+  # can push a fresh-namespace install past helm's 600s wait timeout.
+  enabled: true
+  image:
+    repository: midnightnetwork/proof-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 2Gi
+      cpu: 2
+
 # Liveness / readiness — nginx ships /healthz from the baked nginx.conf
 # (returns 200 'ok' on a non-SPA path). HTTP probes are cheaper than
 # TCP-level since they exercise the server's request loop.

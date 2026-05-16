@@ -11,3 +11,9 @@ replicaCount: 1
 # `staging` and `prod` env values turn it on with the public hosts.
 ingress:
   enabled: false
+
+# Skip the proof-server in testflight: its BLS-param fetch on first
+# boot can push helm's `wait` past 600s. Staging/prod keep the chart
+# default of `enabled: true`.
+proofServer:
+  enabled: false
