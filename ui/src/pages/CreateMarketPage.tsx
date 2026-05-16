@@ -158,7 +158,7 @@ export const CreateMarketPage = () => {
             />
           </label>
           <label className="create-market__field">
-            <span>Closes at</span>
+            <span>Trading ends</span>
             <input
               type="datetime-local"
               value={closeAt}

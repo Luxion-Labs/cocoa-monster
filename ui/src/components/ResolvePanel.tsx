@@ -1,7 +1,7 @@
 import { type CocoaApi, type CocoaState, Side, Status } from "cocoa-contract";
 import { useEffect, useState } from "react";
 
-import { formatSide, formatUnixSeconds } from "../lib/format";
+import { formatSide } from "../lib/format";
 
 type Props = {
   api: CocoaApi;
@@ -71,8 +71,8 @@ export const ResolvePanel = ({ api, state }: Props) => {
       <div className="resolve-panel" data-testid="resolve-panel">
         <h3>Oracle</h3>
         <p>
-          Closes <strong>{formatUnixSeconds(state.closeTime)}</strong>. After
-          close, anyone can stop trading before the oracle finalizes.
+          Trading is open. After the cutoff, anyone can stop trading before the
+          oracle finalizes.
         </p>
         <button
           type="button"
