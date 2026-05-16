@@ -48,6 +48,7 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   padding: 0.8rem 1.5rem;
   border-bottom: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.9);
@@ -57,9 +58,33 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   z-index: 10;
 }
 
+.app__left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
 .app__brand {
   font-size: 1.25rem;
   font-weight: 800;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+
+.app__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.app__nav a {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.app__nav a:hover {
   color: var(--text);
 }
 
@@ -635,123 +660,6 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   font-size: 0.85rem;
 }
 
-/* hidden wallet utility */
-.shield-page {
-  max-width: 760px;
-}
-
-.shield-page__layout {
-  display: grid;
-  gap: 1rem;
-}
-
-.shield-page__balances {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  margin: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--border);
-}
-
-.shield-page__balances div {
-  padding: 1rem;
-  background: var(--surface);
-}
-
-.shield-page__balances dt {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.shield-page__balances dd {
-  margin: 0.2rem 0 0;
-  font-size: 1.45rem;
-  font-weight: 800;
-}
-
-.shield-page__balances span {
-  color: var(--muted);
-  font-size: 0.86rem;
-}
-
-.shield-page__form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  max-width: 520px;
-  padding: 1.25rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.shield-page__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.shield-page__field input {
-  min-height: 42px;
-  padding: 0 0.75rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font: inherit;
-}
-
-.shield-page__presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.shield-page__recipient {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.75rem;
-  background: var(--surface-2);
-  border-radius: 8px;
-}
-
-.shield-page__recipient span {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.shield-page__recipient code {
-  overflow-wrap: anywhere;
-}
-
-.shield-page__error {
-  color: var(--danger);
-  background: rgba(238, 79, 90, 0.12);
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.shield-page__success {
-  color: var(--primary-strong);
-  background: rgba(19, 163, 111, 0.12);
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
 .oracle-panel,
 .factory-admin__panel {
   display: flex;
@@ -824,8 +732,29 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   border-radius: 8px;
 }
 
-@media (max-width: 640px) {
-  .shield-page__balances {
-    grid-template-columns: 1fr;
+.factory-admin__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.factory-admin__intro h3,
+.factory-admin__intro p {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .app__bar,
+  .app__left {
+    align-items: flex-start;
+  }
+
+  .app__bar {
+    flex-direction: column;
+  }
+
+  .app__left {
+    flex-direction: column;
+    gap: 0.6rem;
   }
 }

@@ -56,8 +56,8 @@ export const FactoryAdminPage = () => {
     <section className="page factory-admin">
       <header className="page__header">
         <div>
-          <p className="page__eyebrow">Hidden admin</p>
-          <h2>Market Factory</h2>
+          <p className="page__eyebrow">Operations</p>
+          <h2>Oracle Operations</h2>
         </div>
       </header>
 
@@ -67,6 +67,14 @@ export const FactoryAdminPage = () => {
         </div>
       ) : (
         <div className="factory-admin__panel">
+          <div className="factory-admin__intro">
+            <h3>Market registry</h3>
+            <p>
+              Deploy one factory, configure its address in every UI, and all
+              markets created through Cocoa will be discoverable by everyone.
+              Oracle proposals and disputes are handled on each market page.
+            </p>
+          </div>
           <label className="create-market__field">
             <span>Factory address</span>
             <input
@@ -97,7 +105,7 @@ export const FactoryAdminPage = () => {
           {factoryAddress && (
             <p className="factory-admin__hint">
               Set <code>VITE_MARKET_FACTORY_ADDRESS={factoryAddress}</code> for
-              every UI instance.
+              every UI instance, then restart the UI.
             </p>
           )}
           {markets.length > 0 && (
