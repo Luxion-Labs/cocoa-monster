@@ -1,13 +1,11 @@
 import { useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { Status } from "cocoa-contract";
 
 import { BetForm } from "../components/BetForm";
 import { ClaimPanel } from "../components/ClaimPanel";
-import { OptimisticOraclePanel } from "../components/OptimisticOraclePanel";
 import { PriceChart } from "../components/PriceChart";
-import { ResolvePanel } from "../components/ResolvePanel";
 import { useCocoaApi } from "../hooks/useCocoaApi";
 import { useCocoaState } from "../hooks/useCocoaState";
 import { useReadOnlyMarketState } from "../hooks/useReadOnlyMarketState";
@@ -58,6 +56,14 @@ export const MarketDetailPage = () => {
             {address ? truncateAddress(address, 8, 8) : ""}
           </code>
         </div>
+        {address && (
+          <Link
+            to={`/oracle/${encodeURIComponent(address)}`}
+            className="btn btn--ghost"
+          >
+            Oracle
+          </Link>
+        )}
       </header>
 
       {apiState.kind === "error" && (
@@ -124,14 +130,6 @@ export const MarketDetailPage = () => {
                 api={api}
                 state={state}
                 wallet={wallet.connection ?? undefined}
-              />
-            )}
-            {api && <ResolvePanel api={api} state={state} />}
-            {address && (
-              <OptimisticOraclePanel
-                contractAddress={address}
-                state={state}
-                api={api}
               />
             )}
           </aside>

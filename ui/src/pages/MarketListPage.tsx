@@ -212,7 +212,7 @@ export const MarketListPage = () => {
         <div className="empty-state" data-testid="market-list-empty">
           <h2>No markets found</h2>
           <p>
-            Deploy a market or connect the shared oracle registry.
+            Deploy a market or connect the shared market registry.
           </p>
           <div className="empty-state__actions">
             <button

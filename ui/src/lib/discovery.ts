@@ -12,7 +12,6 @@ import {
 } from "cocoa-contract";
 import type { KnownMarket } from "./markets";
 import { cocoaConfig } from "./network";
-import { fetchOracleMarkets } from "./oracle";
 
 const getProvider = () => 
   indexerPublicDataProvider(cocoaConfig.indexerUri, cocoaConfig.indexerWsUri);
@@ -88,12 +87,10 @@ export const fetchFactoryMarkets = async (): Promise<KnownMarket[]> => {
 };
 
 export const fetchSharedMarkets = async (): Promise<KnownMarket[]> => {
-  const [factory, registry, oracle] = await Promise.allSettled([
+  const [factory, registry] = await Promise.allSettled([
     fetchFactoryMarkets(),
     fetchRegistryMarkets(),
-    fetchOracleMarkets(),
   ]);
-  const now = Date.now();
   const markets: KnownMarket[] = [];
 
   if (factory.status === "fulfilled") {
@@ -106,18 +103,6 @@ export const fetchSharedMarkets = async (): Promise<KnownMarket[]> => {
     markets.push(...registry.value);
   } else {
     console.warn("[discovery] Registry refresh failed:", registry.reason);
-  }
-
-  if (oracle.status === "fulfilled") {
-    markets.push(
-      ...oracle.value.map((market) => ({
-        contractAddress: market.contractAddress,
-        question: market.question,
-        addedAt: market.addedAt ?? now,
-      })),
-    );
-  } else {
-    console.warn("[discovery] Oracle registry refresh failed:", oracle.reason);
   }
 
   return markets;

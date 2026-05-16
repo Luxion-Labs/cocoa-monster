@@ -6,6 +6,7 @@ import { CreateMarketPage } from "./pages/CreateMarketPage";
 import { FactoryAdminPage } from "./pages/FactoryAdminPage";
 import { MarketDetailPage } from "./pages/MarketDetailPage";
 import { MarketListPage } from "./pages/MarketListPage";
+import { OracleMarketPage } from "./pages/OracleMarketPage";
 
 const App = () => {
   const wallet = useWallet();
@@ -35,6 +36,7 @@ const App = () => {
           <Route path="/create" element={<CreateMarketPage />} />
           <Route path="/m/:address" element={<MarketDetailPage />} />
           <Route path="/oracle" element={<FactoryAdminPage />} />
+          <Route path="/oracle/:address" element={<OracleMarketPage />} />
         </Routes>
       </main>
       <footer className="app__footer">

@@ -3,7 +3,8 @@ import {
   joinMarketFactory,
   type RegisteredMarket,
 } from "cocoa-contract";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useWallet } from "../hooks/useWallet";
 import { explainError } from "../lib/errors";
@@ -19,18 +20,21 @@ export const FactoryAdminPage = () => {
   const [markets, setMarkets] = useState<readonly RegisteredMarket[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const providers = useMemo(
+    () => (wallet.connection ? buildCocoaProviders(wallet.connection) : null),
+    [wallet.connection],
+  );
 
   const refresh = useCallback(async () => {
-    if (!wallet.connection || !factoryAddress.trim()) return;
+    if (!providers || !factoryAddress.trim()) return;
     setError(null);
     try {
-      const providers = buildCocoaProviders(wallet.connection);
       const factory = await joinMarketFactory(providers as never, factoryAddress.trim());
       setMarkets(await factory.markets());
     } catch (err) {
       setError(explainError(err));
     }
-  }, [factoryAddress, wallet.connection]);
+  }, [factoryAddress, providers]);
 
   useEffect(() => {
     void refresh();
@@ -41,8 +45,7 @@ export const FactoryAdminPage = () => {
     setSubmitting(true);
     setError(null);
     try {
-      const providers = buildCocoaProviders(wallet.connection);
-      const factory = await deployMarketFactory(providers as never);
+      const factory = await deployMarketFactory(providers! as never);
       setFactoryAddress(factory.contractAddress);
       setMarkets([]);
     } catch (err) {
@@ -72,7 +75,6 @@ export const FactoryAdminPage = () => {
             <p>
               Deploy one factory, configure its address in every UI, and all
               markets created through Cocoa will be discoverable by everyone.
-              Oracle proposals and disputes are handled on each market page.
             </p>
           </div>
           <label className="create-market__field">
@@ -116,6 +118,12 @@ export const FactoryAdminPage = () => {
                   <code title={market.contractAddress}>
                     {truncateAddress(market.contractAddress, 8, 8)}
                   </code>
+                  <Link
+                    to={`/oracle/${encodeURIComponent(market.contractAddress)}`}
+                    className="btn btn--ghost"
+                  >
+                    Oracle
+                  </Link>
                 </li>
               ))}
             </ul>

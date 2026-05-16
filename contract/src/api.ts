@@ -64,6 +64,9 @@ const randomBytes32 = (): Uint8Array => {
   return buf;
 };
 
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((byte, i) => byte === b[i]);
+
 const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
 /**
@@ -312,7 +315,7 @@ export class CocoaApi {
     await this.providers.privateStateProvider.set(COCOA_PRIVATE_STATE_ID, {
       ...ps,
       ownedPositions: ps.ownedPositions.filter(
-        (p) => p.nonce !== position.nonce,
+        (p) => !sameBytes(p.nonce, position.nonce),
       ),
     });
   }

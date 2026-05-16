@@ -4,6 +4,9 @@ _default:
 install:
     npm install --legacy-peer-deps
 
+clean:
+    rm -rf contract/dist contract/node_modules/.vite ui/dist ui/.vite ui/node_modules/.vite
+
 compact:
     @if [ ! -f contract/src/managed/cocoa/compiler/contract-info.json ] || [ ! -f contract/src/managed/factory/compiler/contract-info.json ] || [ contract/src/cocoa.compact -nt contract/src/managed/cocoa/compiler/contract-info.json ] || [ contract/src/factory.compact -nt contract/src/managed/factory/compiler/contract-info.json ]; then \
         nix develop -c sh -c 'cd contract && npm run compact'; \

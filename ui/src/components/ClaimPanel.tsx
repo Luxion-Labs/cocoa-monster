@@ -16,10 +16,13 @@ type Props = {
   wallet?: LaceConnection;
 };
 
+const positionId = (position: CocoaPosition): string =>
+  Array.from(position.nonce, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
 export const ClaimPanel = ({ api, state, wallet }: Props) => {
   const [positions, setPositions] = useState<readonly CocoaPosition[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loadingNonce, setLoadingNonce] = useState<Uint8Array | null>(null);
+  const [loadingPositionId, setLoadingPositionId] = useState<string | null>(null);
 
   const refresh = async (): Promise<void> => {
     try {
@@ -37,7 +40,7 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
   }, [api, state.nullifierCount]);
 
   const claim = async (position: CocoaPosition): Promise<void> => {
-    setLoadingNonce(position.nonce);
+    setLoadingPositionId(positionId(position));
     setError(null);
     try {
       if (!wallet) {
@@ -49,7 +52,7 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoadingNonce(null);
+      setLoadingPositionId(null);
     }
   };
 
@@ -68,7 +71,8 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
     <div className="claim-panel" data-testid="claim-panel">
       <h3>Your positions</h3>
       <ul className="claim-panel__list">
-        {positions.map((p, i) => {
+        {positions.map((p) => {
+          const id = positionId(p);
           const isWinner =
             winnerSide !== null &&
             ((winnerSide === Side.YES && p.side === Side.YES) ||
@@ -76,7 +80,7 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
           const canClaim = state.status === Status.RESOLVED && isWinner;
           return (
             <li
-              key={`${i}-${p.amount}`}
+              key={id}
               className="claim-panel__item"
               data-testid="claim-panel-item"
             >
@@ -87,11 +91,11 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
                 <button
                   type="button"
                   onClick={() => claim(p)}
-                  disabled={loadingNonce === p.nonce}
+                  disabled={loadingPositionId === id}
                   className="btn btn--primary"
                   data-testid="claim-panel-redeem"
                 >
-                  {loadingNonce === p.nonce ? "Marking…" : "Mark claimed"}
+                  {loadingPositionId === id ? "Claiming..." : "Claim payout"}
                 </button>
               ) : state.status === Status.RESOLVED ? (
                 <span className="claim-panel__status">Lost</span>

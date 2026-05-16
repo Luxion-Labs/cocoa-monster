@@ -38,7 +38,7 @@ The UI is served at `http://localhost:5173`.
 - Open `/oracle` to deploy or inspect the shared `MarketFactory`.
 - After deploying a factory, set `VITE_MARKET_FACTORY_ADDRESS=<factory-address>` for every UI instance and restart `just dev`.
 - The home page reads that factory first, so every teammate sees the same markets.
-- Each market detail page has an optimistic oracle panel for proposing, disputing, and finalizing an outcome.
+- Oracle proposal, dispute, finalization, and on-chain outcome submission are handled from `/oracle/<market-address>`.
 - The oracle API is served by the `oracle` process and proxied through the UI at `/oracle-api`.
 
 ## License
