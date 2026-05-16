@@ -53,7 +53,7 @@
         # Re-discover whenever package-lock.json moves: replace with
         # `pkgs.lib.fakeHash`, run `nix build .#ui-bundle`, and paste the
         # `got: sha256-...=` line back here.
-        npmDepsHash = "sha256-s0xEn2cFGGx5M2/dKNUYrwTCwdjU6Ef7ist8S7RI3ys=";
+        npmDepsHash = "sha256-66YWpKJG4z1VSbJXhqkHVoVuv6/RO4d+vke13EIAo4I=";
       };
 
       docker-image = import ./nix/docker-image.nix {
