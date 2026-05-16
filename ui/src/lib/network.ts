@@ -23,6 +23,15 @@ export type CocoaConfig = {
 const fromEnv = (key: string, fallback: string): string =>
   (import.meta.env?.[key] as string | undefined) ?? fallback;
 
+const deriveProofServerUri = (): string => {
+  if (typeof window === "undefined") return "http://localhost:5173/proof-server";
+  const { hostname, protocol, origin } = window.location;
+  if (hostname.startsWith("app.")) {
+    return `${protocol}//proof-server.${hostname.slice("app.".length)}`;
+  }
+  return `${origin}/proof-server`;
+};
+
 export const cocoaConfig: CocoaConfig = {
   // Midnight's networkId enum values in 4.x: "undeployed" | "mainnet"
   // | "preview" | "preprod". Default to `preprod` since that's where the
@@ -36,15 +45,16 @@ export const cocoaConfig: CocoaConfig = {
     "VITE_INDEXER_WS_URI",
     "wss://indexer.testnet-02.midnight.network/api/v1/graphql/ws",
   ),
-  // Default to the same-origin proxy (configured in vite.config.ts) which
-  // forwards to the public preprod proof server. CORS-clean and works
-  // out of the box. Override with VITE_PROOF_SERVER_URI to point at a
-  // different upstream.
+  // Production: SPA is at app.<domain>, proof-server at proof-server.<domain>
+  // — same root domain, different subdomain, with CORS allowed by the
+  // proof-server's ingress (see `proofServer.ingress.annotations` in
+  // charts/cocoa-monster/values.yaml). Local dev (any non-`app.*` host)
+  // falls back to the same-origin `/proof-server` path proxied by
+  // vite.config.ts to localhost:6300. Override end-to-end with
+  // VITE_PROOF_SERVER_URI.
   proofServerUri: fromEnv(
     "VITE_PROOF_SERVER_URI",
-    typeof window === "undefined"
-      ? "http://localhost:5173/proof-server"
-      : `${window.location.origin}/proof-server`,
+    deriveProofServerUri(),
   ),
   // FetchZkConfigProvider serves keys at `${baseURL}/keys/{circuit}.prover`
   // and zkir at `${baseURL}/zkir/{circuit}.bzkir`. We symlink the

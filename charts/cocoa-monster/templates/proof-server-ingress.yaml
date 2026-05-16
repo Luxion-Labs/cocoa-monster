@@ -1,0 +1,37 @@
+{{- if and .Values.proofServer.enabled .Values.proofServer.ingress.enabled -}}
+{{- $corsOrigin := "" -}}
+{{- if .Values.ingress.host -}}
+{{-   $corsOrigin = printf "https://%s" .Values.ingress.host -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "cocoa-monster.fullname" . }}-proof-server
+  labels:
+    {{- include "cocoa-monster.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ printf "%s-proof-server" (include "cocoa-monster.name" .) }}
+  annotations:
+    {{- if $corsOrigin }}
+    nginx.ingress.kubernetes.io/cors-allow-origin: {{ $corsOrigin | quote }}
+    {{- end }}
+    {{- with .Values.proofServer.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.proofServer.ingress.className }}
+  rules:
+  - host: {{ .Values.proofServer.ingress.host }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "cocoa-monster.fullname" . }}-proof-server
+            port:
+              number: {{ .Values.proofServer.service.port }}
+  tls:
+  - hosts:
+    - {{ .Values.proofServer.ingress.host }}
+    secretName: {{ include "cocoa-monster.fullname" . }}-proof-server-tls
+{{- end }}

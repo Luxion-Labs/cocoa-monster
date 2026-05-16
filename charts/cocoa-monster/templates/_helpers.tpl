@@ -36,3 +36,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/name: {{ include "cocoa-monster.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
+
+{{/* Standard labels minus app.kubernetes.io/name (proof-server resources
+     override the name to keep their selectors disjoint from the SPA). */}}
+{{- define "cocoa-monster.commonLabels" -}}
+helm.sh/chart: {{ include "cocoa-monster.chart" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}

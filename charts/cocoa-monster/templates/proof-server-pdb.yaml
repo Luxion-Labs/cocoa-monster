@@ -1,0 +1,16 @@
+{{- if and .Values.proofServer.enabled (gt (int .Values.proofServer.replicaCount) 1) .Values.proofServer.podDisruptionBudget.enabled }}
+{{- $name := printf "%s-proof-server" (include "cocoa-monster.name" .) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cocoa-monster.fullname" . }}-proof-server
+  labels:
+    {{- include "cocoa-monster.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+spec:
+  minAvailable: {{ .Values.proofServer.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

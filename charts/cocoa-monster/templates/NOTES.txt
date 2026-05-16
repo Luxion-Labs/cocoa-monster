@@ -2,5 +2,8 @@
 
 Service: {{ include "cocoa-monster.fullname" . }}:{{ .Values.service.port }} ({{ .Values.service.type }})
 {{- if .Values.ingress.enabled }}
-Public:  https://{{ .Values.ingress.host }}/
+SPA:     https://{{ .Values.ingress.host }}/
+{{- end }}
+{{- if and .Values.proofServer.enabled .Values.proofServer.ingress.enabled }}
+Proof:   https://{{ .Values.proofServer.ingress.host }}/
 {{- end }}

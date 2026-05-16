@@ -50,44 +50,6 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-        {{- if .Values.proofServer.enabled }}
-        # Proof-server sidecar. The browser can't reach the public
-        # preprod proof-server (no CORS); the nginx in the main
-        # container proxies /proof-server/* to localhost:6300 here.
-        # Sidecar (not separate pod) keeps the upstream loopback,
-        # so nginx never has to do in-cluster DNS resolution.
-        - name: proof-server
-          image: "{{ .Values.proofServer.image.repository }}:{{ .Values.proofServer.image.tag }}"
-          imagePullPolicy: {{ .Values.proofServer.image.pullPolicy }}
-          ports:
-            - name: proof
-              containerPort: 6300
-              protocol: TCP
-          env:
-            - name: RUST_BACKTRACE
-              value: "full"
-          # Cold start downloads BLS public params (~30MB) from S3
-          # once per pod. failureThreshold=24 (~2 min) covers the
-          # typical first boot before k8s gives up on the container.
-          readinessProbe:
-            httpGet:
-              path: /
-              port: proof
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 24
-          livenessProbe:
-            httpGet:
-              path: /
-              port: proof
-            initialDelaySeconds: 120
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
-          resources:
-            {{- toYaml .Values.proofServer.resources | nindent 12 }}
-        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
