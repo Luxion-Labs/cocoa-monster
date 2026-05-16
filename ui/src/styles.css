@@ -112,8 +112,53 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
 
 /* wallet */
 .wallet { display: flex; align-items: center; gap: 0.75rem; }
-.wallet__address { font-family: ui-monospace; font-size: 0.85rem; color: var(--muted); }
-.wallet__error { color: var(--danger); font-size: 0.85rem; max-width: 280px; }
+.wallet--connected {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.wallet__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.wallet__address { 
+  font-family: ui-monospace; 
+  font-size: 0.85rem; 
+  color: var(--muted); 
+}
+.wallet__balances {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+}
+.wallet__balance {
+  color: var(--text);
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+.wallet__loading {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.wallet__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.wallet__error { 
+  color: var(--danger); 
+  font-size: 0.85rem; 
+  max-width: 280px; 
+}
+
+.btn--sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.9rem;
+}
 
 /* market list */
 .market-list__grid {
