@@ -59,3 +59,10 @@ helm-lint:
 # Render the chart with the testflight values for offline review.
 helm-template:
     helm template cocoa-monster charts/cocoa-monster -f ci/testflight/values.yaml
+
+# Remove build artifacts, generated ZK outputs, and node_modules.
+clean:
+    rm -rf contract/dist ui/dist ui/.vite
+    rm -rf contract/src/managed
+    rm -rf ui/public/keys ui/public/zkir
+    rm -rf node_modules contract/node_modules ui/node_modules

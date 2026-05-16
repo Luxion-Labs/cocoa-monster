@@ -20,13 +20,10 @@
 # the fixup leaves alone.
 {
   pkgs,
-  cliVersion ? "0.2.0",
-  # compactc 0.30.0 emits checkRuntimeVersion('0.15.0'), which lines up
-  # with compact-js@2.5.0's pinned compact-runtime@0.15.0. Newer
-  # compactc (0.31.0+) emits 0.16.0 and conflicts with the SDK.
-  toolchainVersion ? "0.30.0",
-  cliHash ? "sha256-2DkOrxS71pBu2uIb5jARaqssGOYK0DdLkhz1ft7B0mY=",
-  toolchainHash ? "sha256-BmQbVb79NThOzlOfexK2XLLPb7SZltJ+8XoC/KytTS0=",
+  cliVersion ? "0.5.1",
+  toolchainVersion ? "0.31.0",
+  cliHash ? "sha256-aExrPS7vlISqu6egggwWauXBafOuzyjL6iB0hAJjumY=",
+  toolchainHash ? "sha256-3btLsifGqcZwmOZWY2SNhkcJdASuCU/cCr5mCDnqPug=",
 }: let
   target = "x86_64-unknown-linux-musl";
 

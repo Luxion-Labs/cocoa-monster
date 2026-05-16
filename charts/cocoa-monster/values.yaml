@@ -59,8 +59,8 @@ proofServer:
   enabled: false
   replicaCount: 1
   image:
-    repository: midnightnetwork/proof-server
-    tag: latest
+    repository: midnightntwrk/proof-server
+    tag: "8.0.3"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP

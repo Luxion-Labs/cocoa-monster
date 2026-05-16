@@ -16,7 +16,9 @@ export default defineConfig({
     target: "esnext",
   },
   server: {
+    allowedHosts: [""],
     // Browser → vite (same-origin, no CORS) → preprod proof-server. The
+
     // proof server doesn't send Access-Control-Allow-Origin, so the
     // dapp can't hit it directly from the browser; the proxy strips
     // origin enforcement.
@@ -49,6 +51,7 @@ export default defineConfig({
     }),
   ],
   optimizeDeps: {
+    include: ["isomorphic-ws"],
     esbuildOptions: {
       target: "esnext",
       supported: { "top-level-await": true },
@@ -57,7 +60,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": "/src",
+      "isomorphic-ws": "isomorphic-ws/browser.js",
       // levelPrivateStateProvider → abstract-level → require('events').
+
       // Vite externalizes Node built-ins for browser builds, leaving
       // EventEmitter undefined and crashing every `class extends` site
       // at module init. Aliasing to the npm `events` polyfill resolves
