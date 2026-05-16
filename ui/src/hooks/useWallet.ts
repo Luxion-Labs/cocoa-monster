@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { type LaceConnection, connectLace, isLaceAuthorized } from "../lib/wallet";
+import { cocoaConfig } from "../lib/network";
+import {
+  type LaceConnection,
+  connectLace,
+  isLaceReachable,
+} from "../lib/wallet";
 
 export type WalletStatus =
   | { kind: "idle" }
@@ -17,9 +22,10 @@ export type UseWallet = {
 };
 
 /**
- * Manages Lace connection state. On mount, checks whether the dapp is
- * already authorized — if so, connects silently. The user can also
- * explicitly trigger `connect()` from a button.
+ * Manages Lace 4.x InitialAPI connection state. On mount, only checks
+ * reachability — Lace's 4.x model doesn't have a passive
+ * `isAuthorized()` check, so the user explicitly clicks the connect
+ * button to call `connect(networkId)`.
  */
 export const useWallet = (): UseWallet => {
   const [status, setStatus] = useState<WalletStatus>({ kind: "idle" });
@@ -27,22 +33,17 @@ export const useWallet = (): UseWallet => {
   useEffect(() => {
     let cancelled = false;
     setStatus({ kind: "checking" });
-    (async () => {
-      try {
-        if (await isLaceAuthorized()) {
-          const connection = await connectLace();
-          if (!cancelled) setStatus({ kind: "connected", connection });
-        } else if (!cancelled) {
-          setStatus({ kind: "idle" });
-        }
-      } catch (err) {
+    void isLaceReachable(2_000)
+      .then(() => {
+        if (!cancelled) setStatus({ kind: "idle" });
+      })
+      .catch((err) => {
         if (!cancelled)
           setStatus({
             kind: "error",
             error: err instanceof Error ? err : new Error(String(err)),
           });
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
@@ -51,7 +52,7 @@ export const useWallet = (): UseWallet => {
   const connect = useCallback(async (): Promise<void> => {
     setStatus({ kind: "connecting" });
     try {
-      const connection = await connectLace();
+      const connection = await connectLace(cocoaConfig.networkId);
       setStatus({ kind: "connected", connection });
     } catch (err) {
       setStatus({
@@ -62,9 +63,9 @@ export const useWallet = (): UseWallet => {
   }, []);
 
   const disconnect = useCallback((): void => {
-    // Lace doesn't expose a disconnect; the dapp simply forgets the connection.
-    // Reconnecting won't show a permission prompt while the user has the
-    // dapp authorized in Lace's settings.
+    // Lace doesn't expose a programmatic disconnect; the dapp simply
+    // forgets the connection. Reconnecting won't show a permission
+    // prompt while the user has the dapp authorized in Lace.
     setStatus({ kind: "idle" });
   }, []);
 

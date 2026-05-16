@@ -1,18 +1,29 @@
-import { Side, Status } from "cocoa-contract";
-import { describe, expect, it } from "vitest";
+// We mock cocoa-contract here because importing it pulls in the
+// midnight-js / onchain-runtime-v3 WASM chain, which loads via
+// fs.readFileSync at module init — fine in the production browser
+// bundle (vite handles WASM differently) but breaks in vitest's jsdom
+// loader. Side/Status are simple numeric enums in the contract bindings,
+// so an inline shim is enough for these unit tests.
+import { vi, describe, expect, it } from "vitest";
 
-import {
+vi.mock("cocoa-contract", () => ({
+  Side: { YES: 0, NO: 1 },
+  Status: { OPEN: 0, RESOLVED: 1 },
+}));
+
+const { Side, Status } = await import("cocoa-contract");
+const {
   formatBigInt,
   formatPriceYes,
   formatSide,
   formatStatus,
   truncateAddress,
-} from "./format";
+} = await import("./format");
 
 describe("formatBigInt", () => {
   it("formats with thousands separators", () => {
     expect(formatBigInt(0n)).toBe("0");
-    expect(formatBigInt(1000n)).toMatch(/1[,.   ]?000/);
+    expect(formatBigInt(1000n)).toMatch(/1[,.   ]?000/);
   });
 });
 

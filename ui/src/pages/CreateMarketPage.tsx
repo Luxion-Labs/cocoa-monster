@@ -52,7 +52,24 @@ export const CreateMarketPage = () => {
     setSubmitting(true);
     setError(null);
     try {
+      console.debug("[cocoa] building providers from wallet connection", {
+        coinPublicKey: wallet.connection.coinPublicKey,
+        configuration: wallet.connection.configuration,
+      });
       const providers = buildCocoaProviders(wallet.connection);
+      console.debug("[cocoa] providers ready", {
+        wallet: providers.walletProvider,
+        midnight: providers.midnightProvider,
+        proof: providers.proofProvider,
+        zk: providers.zkConfigProvider,
+        publicData: providers.publicDataProvider,
+        privateState: providers.privateStateProvider,
+      });
+      console.debug("[cocoa] calling deployCocoaMarket", {
+        question: question.trim(),
+        initialLiquidity: String(liquidityBig),
+        closeTime: String(closeTimestamp),
+      });
       // Generate a fresh oracle secret — the deployer becomes the trusted
       // oracle, and only their device's private state will satisfy the
       // contract's `oracleSecret()` witness later.
@@ -61,6 +78,7 @@ export const CreateMarketPage = () => {
         initialLiquidity: liquidityBig!,
         closeTime: closeTimestamp!,
       });
+      console.debug("[cocoa] deployed at", api.contractAddress);
       rememberMarket({
         contractAddress: api.contractAddress,
         question: question.trim(),
@@ -68,6 +86,7 @@ export const CreateMarketPage = () => {
       });
       navigate(`/m/${api.contractAddress}`);
     } catch (err) {
+      console.error("[cocoa] deploy failed:", err);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);

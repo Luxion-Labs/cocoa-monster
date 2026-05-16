@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
@@ -10,23 +9,12 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     globals: false,
     server: {
-      // Inline cocoa-contract so the alias below applies to its
-      // transitive imports of compact-runtime — without this, vitest
-      // treats the workspace package as external and the rename shim
-      // never gets hit.
       deps: {
-        inline: [
-          /cocoa-contract/,
-          /@midnight-ntwrk\//,
-        ],
+        // Inline workspace + midnight-js packages so vitest processes their
+        // imports through vite's transform pipeline (resolves the contract
+        // package's `@midnight-ntwrk/compact-runtime` import correctly).
+        inline: [/cocoa-contract/, /@midnight-ntwrk\//],
       },
-    },
-  },
-  resolve: {
-    alias: {
-      "@midnight-ntwrk/compact-runtime": fileURLToPath(
-        new URL("./src/lib/compact-runtime-shim.ts", import.meta.url),
-      ),
     },
   },
 });

@@ -1,7 +1,35 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { type CocoaApi, type CocoaState, Side, Status } from "cocoa-contract";
-import { describe, expect, it, vi } from "vitest";
+// See note in format.spec.ts — mocking cocoa-contract avoids the
+// onchain-runtime-v3 WASM init crash under vitest's jsdom loader.
+import { vi } from "vitest";
 
+vi.mock("cocoa-contract", () => ({
+  Side: { YES: 0, NO: 1 },
+  Status: { OPEN: 0, RESOLVED: 1 },
+  // Recompute YES quote with the same CPMM math as quote.ts so the form
+  // still produces realistic numbers without the heavy import chain.
+  quoteAmountOut: (
+    reserveYes: bigint,
+    reserveNo: bigint,
+    side: number,
+    collateralIn: bigint,
+  ): bigint => {
+    if (collateralIn <= 0n) return 0n;
+    const k = reserveYes * reserveNo;
+    if (side === 0) {
+      const newReserveNo = reserveNo + collateralIn;
+      const newReserveYes = k / newReserveNo;
+      return reserveYes - newReserveYes;
+    }
+    const newReserveYes = reserveYes + collateralIn;
+    const newReserveNo = k / newReserveYes;
+    return reserveNo - newReserveNo;
+  },
+}));
+
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import { Side, Status, type CocoaApi, type CocoaState } from "cocoa-contract";
 import { BetForm } from "./BetForm";
 
 const fakeApi = (impl: Partial<CocoaApi> = {}) =>
@@ -47,17 +75,19 @@ describe("BetForm", () => {
     ).toBe(true);
   });
 
-  it("toggles between YES and NO and updates the implied price", () => {
+  it("toggles between YES and NO and updates the quote shape", () => {
     render(<BetForm api={fakeApi()} state={baseState} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "100" },
     });
-    const yesQuote = screen.getByTestId("bet-form-quote").textContent ?? "";
-    expect(yesQuote).toMatch(/YES shares/);
+    expect(screen.getByTestId("bet-form-quote").textContent).toMatch(
+      /YES shares/,
+    );
 
     fireEvent.click(screen.getByTestId("bet-form-side-no"));
-    const noQuote = screen.getByTestId("bet-form-quote").textContent ?? "";
-    expect(noQuote).toMatch(/NO shares/);
+    expect(screen.getByTestId("bet-form-quote").textContent).toMatch(
+      /NO shares/,
+    );
   });
 
   it("calls api.buy with the computed amountOut on submit", async () => {
@@ -66,12 +96,12 @@ describe("BetForm", () => {
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "100" },
     });
-    const form = screen.getByTestId("bet-form");
-    fireEvent.submit(form);
+    fireEvent.submit(screen.getByTestId("bet-form"));
 
     expect(api.buy).toHaveBeenCalledTimes(1);
-    const [side, collateral, amountOut] = (api.buy as ReturnType<typeof vi.fn>).mock
-      .calls[0];
+    const [side, collateral, amountOut] = (
+      api.buy as ReturnType<typeof vi.fn>
+    ).mock.calls[0];
     expect(side).toBe(Side.YES);
     expect(collateral).toBe(100n);
     expect(amountOut).toBeGreaterThan(0n);

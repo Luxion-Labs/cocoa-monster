@@ -16,8 +16,11 @@ export const WalletConnect = ({ status, onConnect, onDisconnect }: Props) => {
   if (status.kind === "connected") {
     return (
       <div className="wallet wallet--connected" data-testid="wallet-connected">
-        <span className="wallet__address" title={status.connection.walletState.address}>
-          {truncateAddress(status.connection.walletState.address)}
+        <span
+          className="wallet__address"
+          title={status.connection.shieldedAddress}
+        >
+          {truncateAddress(status.connection.shieldedAddress)}
         </span>
         <button type="button" onClick={onDisconnect} className="btn btn--ghost">
           Disconnect

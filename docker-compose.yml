@@ -1,7 +1,8 @@
 services:
+  # Latest proof-server (network-agnostic in 4.x — derives network from
+  # the transaction payload, no `--network` flag needed). Exposes 6300.
   proof-server:
-    image: "midnightnetwork/proof-server:4.0.0"
-    command: ["midnight-proof-server --network testnet"]
+    image: "midnightnetwork/proof-server:latest"
     restart: on-failure
     ports:
       - "6300:6300"

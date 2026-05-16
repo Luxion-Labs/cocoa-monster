@@ -8,6 +8,10 @@ dist/
 # Compact build output
 managed/
 
+# UI's copy of the compiled ZK artifacts (synced from contract/src/managed/)
+ui/public/keys/
+ui/public/zkir/
+
 # Nix / direnv
 .direnv/
 result
