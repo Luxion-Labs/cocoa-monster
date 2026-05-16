@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 import { MarketCard } from "../components/MarketCard";
 import { listKnownMarkets, rememberMarket } from "../lib/markets";
-import { discoverMarkets, mergeWithLocalMarkets, type DiscoveredMarket } from "../lib/discovery";
+import { fetchMarketStates, mergeWithLocalMarkets, type DiscoveredMarket } from "../lib/discovery";
 
 export const MarketListPage = () => {
   const [markets, setMarkets] = useState<DiscoveredMarket[]>([]);
@@ -18,7 +18,7 @@ export const MarketListPage = () => {
       setError(null);
       
       try {
-        // First, show local markets immediately
+        // First, show local markets immediately with placeholder data
         const local = listKnownMarkets();
         if (local.length > 0 && !cancelled) {
           setMarkets(local.map(m => ({
@@ -29,29 +29,25 @@ export const MarketListPage = () => {
           })));
         }
 
-        // Then discover all markets from the indexer
-        const discovered = await discoverMarkets();
+        // Then fetch fresh state from the indexer for all known markets
+        const addresses = local.map(m => m.contractAddress);
+        const discovered = await fetchMarketStates(addresses);
         
         if (!cancelled) {
-          // Merge with local markets and remember new ones
-          const merged = mergeWithLocalMarkets(discovered, local);
-          
-          // Remember newly discovered markets
-          for (const market of discovered) {
-            if (!local.find(m => m.contractAddress === market.contractAddress)) {
-              rememberMarket({
-                contractAddress: market.contractAddress,
-                question: market.question,
-                addedAt: market.addedAt,
-              });
-            }
+          // Only update if we actually got fresh data
+          if (discovered.length > 0) {
+            // Merge with local markets to preserve addedAt timestamps
+            const merged = mergeWithLocalMarkets(discovered, local);
+            setMarkets(merged);
+          } else if (local.length === 0) {
+            // Only clear markets if we had no local markets to begin with
+            setMarkets([]);
           }
-          
-          setMarkets(merged);
+          // Otherwise keep showing the local markets we already set
         }
       } catch (err) {
         if (!cancelled) {
-          console.error("[market-list] Discovery failed:", err);
+          console.error("[market-list] Failed to fetch market states:", err);
           setError(err instanceof Error ? err.message : String(err));
           // Fall back to local markets on error
           const local = listKnownMarkets();
@@ -87,18 +83,18 @@ export const MarketListPage = () => {
       
       {error && (
         <div className="market-list__error" role="alert">
-          <p>⚠️ Failed to discover markets from indexer: {error}</p>
+          <p>⚠️ Failed to fetch fresh market data from indexer: {error}</p>
           <p>Showing locally cached markets only.</p>
         </div>
       )}
 
       {isLoading && markets.length === 0 ? (
         <div className="market-list__loading" data-testid="market-list-loading">
-          <p>🔍 Discovering markets on Midnight...</p>
+          <p>🔍 Loading markets...</p>
         </div>
       ) : markets.length === 0 ? (
         <div className="empty-state" data-testid="market-list-empty">
-          <p>No markets found on the network yet.</p>
+          <p>No markets found yet.</p>
           <p>
             <Link to="/create">Deploy the first one</Link> to get started, or
             paste an existing market address into the URL bar:{" "}
