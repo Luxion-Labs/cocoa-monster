@@ -161,6 +161,34 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
 }
 
 /* market list */
+.market-list__error {
+  background: rgba(238, 79, 90, 0.12);
+  border: 1px solid rgba(238, 79, 90, 0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  color: var(--danger);
+}
+.market-list__error p {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.market-list__loading {
+  background: var(--surface);
+  padding: 2rem;
+  border-radius: 12px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.market-list__status {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
 .market-list__grid {
   list-style: none;
   margin: 0;
