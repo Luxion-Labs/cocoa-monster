@@ -1,10 +1,11 @@
-import { Side, Status, type CocoaState } from "cocoa-contract";
+import { Side, Status, type CocoaApi, type CocoaState } from "cocoa-contract";
 import { useCallback, useEffect, useState } from "react";
 
 import { formatSide, formatUnixSeconds } from "../lib/format";
 import {
   disputeOracleOutcome,
   fetchOracleMarket,
+  fetchOracleResolution,
   finalizeOracleOutcome,
   proposeOracleOutcome,
   type OracleMarket,
@@ -14,15 +15,21 @@ import {
 type Props = {
   contractAddress: string;
   state: CocoaState;
+  api: CocoaApi | null;
 };
 
 const sideToOutcome = (side: Side | null): OracleOutcome | null =>
   side === Side.YES ? "YES" : side === Side.NO ? "NO" : null;
 
+const outcomeToSide = (outcome: OracleOutcome): Side =>
+  outcome === "YES" ? Side.YES : Side.NO;
+
 const deadlineLabel = (deadline?: number): string =>
   deadline ? formatUnixSeconds(BigInt(deadline)) : "unknown";
 
-export const OptimisticOraclePanel = ({ contractAddress, state }: Props) => {
+const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
+
+export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) => {
   const [market, setMarket] = useState<OracleMarket | null>(null);
   const [outcome, setOutcome] = useState<OracleOutcome>("YES");
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -92,6 +99,30 @@ export const OptimisticOraclePanel = ({ contractAddress, state }: Props) => {
     }
   };
 
+  const submitFinalizedOnChain = async (): Promise<void> => {
+    setSubmitting("resolve");
+    setError(null);
+    try {
+      if (!api) {
+        throw new Error("Connect wallet to submit the finalized outcome on-chain.");
+      }
+      const resolution = await fetchOracleResolution(contractAddress);
+      if (state.status === Status.OPEN) {
+        await api.close(nowSeconds());
+      }
+      await api.resolveWithOracleSecret(
+        outcomeToSide(resolution.outcome),
+        nowSeconds(),
+        resolution.oracleSecret,
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
   const finalizedOutcome =
     market?.finalOutcome ?? sideToOutcome(state.outcome) ?? undefined;
   const canPropose =
@@ -99,6 +130,8 @@ export const OptimisticOraclePanel = ({ contractAddress, state }: Props) => {
     (!market || market.oracleStatus === "AWAITING_PROPOSAL");
   const canDispute = market?.oracleStatus === "PROPOSED";
   const canFinalize = market?.oracleStatus === "PROPOSED";
+  const canSubmitFinalized =
+    market?.oracleStatus === "FINALIZED" && state.status !== Status.RESOLVED;
 
   return (
     <div className="oracle-panel" data-testid="optimistic-oracle-panel">
@@ -185,6 +218,21 @@ export const OptimisticOraclePanel = ({ contractAddress, state }: Props) => {
           disabled={submitting !== null}
         >
           {submitting === "finalize" ? "Finalizing..." : "Finalize after window"}
+        </button>
+      )}
+
+      {canSubmitFinalized && (
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={() => void submitFinalizedOnChain()}
+          disabled={submitting !== null || !api}
+        >
+          {submitting === "resolve"
+            ? "Submitting..."
+            : api
+              ? "Submit outcome on-chain"
+              : "Connect wallet to submit"}
         </button>
       )}
 

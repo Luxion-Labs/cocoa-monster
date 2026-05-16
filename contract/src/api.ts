@@ -214,6 +214,28 @@ export class CocoaApi {
     await this.deployed.callTx.resolve(side, nowTs);
   }
 
+  async resolveWithOracleSecret(
+    side: Side,
+    nowTs: bigint,
+    oracleSecret: Uint8Array,
+  ): Promise<void> {
+    if (oracleSecret.length !== 32) {
+      throw new Error("oracle secret must be 32 bytes");
+    }
+    this.providers.privateStateProvider.setContractAddress(
+      this.contractAddress as never,
+    );
+    const ps = await this.providers.privateStateProvider.get(
+      COCOA_PRIVATE_STATE_ID,
+    );
+    await this.providers.privateStateProvider.set(COCOA_PRIVATE_STATE_ID, {
+      ...(ps ??
+        createCocoaPrivateState(randomBytes32(), randomBytes32(), oracleSecret)),
+      oracleSecret,
+    });
+    await this.resolve(side, nowTs);
+  }
+
   async redeem(position: CocoaPosition, recipient: UserAddress): Promise<bigint> {
     await this.rotateNonce(position.nonce);
     const result = await this.deployed.callTx.redeem(

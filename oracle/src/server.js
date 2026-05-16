@@ -255,14 +255,26 @@ const route = async (request, response) => {
     return send(response, 200, {
       market: publicMarket(market),
       nextAction:
-        "submit market.close() if needed, then market.resolve(finalOutcome) from an oracle wallet",
+        "submit the finalized outcome on-chain from the market page",
     });
   }
 
-  if (request.method === "POST" && url.pathname === "/oracle/resolve") {
-    return send(response, 501, {
-      error:
-        "resolver wallet integration is not implemented yet; oracle secrets are stored separately from the browser",
+  const resolutionMatch = url.pathname.match(/^\/oracle\/markets\/([^/]+)\/resolution$/);
+  if (request.method === "GET" && resolutionMatch) {
+    const store = await loadStore();
+    const market = store.markets[decodeURIComponent(resolutionMatch[1])];
+    if (!market) return send(response, 404, { error: "unknown market" });
+    if (!market.finalizedAt || !market.finalOutcome) {
+      return send(response, 409, { error: "market is not finalized" });
+    }
+    if (market.disputedAt) {
+      return send(response, 409, {
+        error: "market is disputed and needs manual arbitration",
+      });
+    }
+    return send(response, 200, {
+      outcome: market.finalOutcome,
+      oracleSecret: market.oracleSecret,
     });
   }
 

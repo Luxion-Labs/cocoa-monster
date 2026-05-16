@@ -128,7 +128,11 @@ export const MarketDetailPage = () => {
             )}
             {api && <ResolvePanel api={api} state={state} />}
             {address && (
-              <OptimisticOraclePanel contractAddress={address} state={state} />
+              <OptimisticOraclePanel
+                contractAddress={address}
+                state={state}
+                api={api}
+              />
             )}
           </aside>
         </div>

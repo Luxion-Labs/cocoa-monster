@@ -36,6 +36,11 @@ export type OracleMarket = {
   readonly finalizedAt?: number;
 };
 
+export type OracleResolution = {
+  readonly outcome: OracleOutcome;
+  readonly oracleSecret: Uint8Array;
+};
+
 const hexToBytes = (hex: string): Uint8Array => {
   if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
     throw new Error("Oracle returned an invalid public key");
@@ -150,6 +155,32 @@ export const finalizeOracleOutcome = async (
   contractAddress: string,
 ): Promise<OracleMarket> =>
   parseMarketPayload(await postJson("/oracle/finalize", { contractAddress }));
+
+export const fetchOracleResolution = async (
+  contractAddress: string,
+): Promise<OracleResolution> => {
+  const response = await fetch(
+    `${oracleBaseUrl()}/oracle/markets/${encodeURIComponent(contractAddress)}/resolution`,
+  );
+  const payload = (await response.json()) as {
+    outcome?: unknown;
+    oracleSecret?: unknown;
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(payload.error ?? `oracle resolution returned ${response.status}`);
+  }
+  if (
+    (payload.outcome !== "YES" && payload.outcome !== "NO") ||
+    typeof payload.oracleSecret !== "string"
+  ) {
+    throw new Error("Oracle returned an invalid resolution");
+  }
+  return {
+    outcome: payload.outcome,
+    oracleSecret: hexToBytes(payload.oracleSecret),
+  };
+};
 
 export const fetchOracleMarkets = async (): Promise<
   Array<{ contractAddress: string; question: string; addedAt?: number }>
