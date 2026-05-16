@@ -16,14 +16,13 @@ export ledger closeTime: Uint<64>;
 export ledger oraclePubKey: Bytes<32>;
 
 // CPMM reserves. YES probability = reserveNo / (reserveYes + reserveNo).
-export ledger reserveYes: Uint<128>;
-export ledger reserveNo: Uint<128>;
+export ledger reserveYes: Uint<64>;
+export ledger reserveNo: Uint<64>;
 
-// Pool of tNIGHT collateral collected from `buy` calls. First buy
-// installs the coin; subsequent buys merge into it. Default value is
-// zero; the value field doubles as a "have we seen any deposit yet"
-// flag (no real bet ever has zero value).
+// Contract-held NIGHT collateral. Every accepted bet receives a shielded
+// native-token coin into this pool before a position is recorded.
 export ledger pool: QualifiedShieldedCoinInfo;
+export ledger volume: Uint<64>;
 
 // Lifecycle. With a single trusted signer there is no dispute window —
 // a market goes straight from OPEN to RESOLVED when the oracle calls
@@ -37,7 +36,7 @@ export ledger nullifiers: Set<Bytes<32>>;
 
 constructor(
   q: Opaque<"string">,
-  initialLiquidity: Uint<128>,
+  initialLiquidity: Uint<64>,
   closeTimestamp: Uint<64>,
   oracleId: Bytes<32>,
 ) {
@@ -58,55 +57,47 @@ witness oracleSecret(): Bytes<32>;
 
 // ----------------- Trading -----------------
 
-// Buy `amountOut` outcome shares of `side` for `coin.value` of tNIGHT.
-// `amountOut` is computed off-chain from the CPMM invariant against the
-// public reserves. Trade size has to be public — the AMM updates on-chain
-// reserves by these amounts — but the buyer's identity stays hidden because
-// the position commitment mixes their secret + nonce into the hash.
-//
-// The wallet attaches a shielded tNIGHT coin via the dapp-connector's
-// `balanceUnsealedTransaction`. The contract pulls it into its own
-// pool, merging with prior collateral so we keep a single coin to pay
-// winners out of.
-export circuit buy(side: Side, amountOut: Uint<128>, coin: ShieldedCoinInfo): Bytes<32> {
+// Buy outcome exposure of `side` with real shielded NIGHT. `amountOut` is
+// the UI's CPMM quote used to update visible odds; the redeemable position
+// amount is the actual NIGHT stake paid into the contract pool.
+export circuit buy(side: Side, amountOut: Uint<64>, coin: ShieldedCoinInfo): Uint<64> {
   assert(status == Status.OPEN, "market not open");
-  // The caller's coin commitment + nonce flow into the contract's
-  // public state via the receive/merge below; disclose the whole
-  // ShieldedCoinInfo so the Compact compiler accepts the privacy
-  // implications. Coin is already public — buyer signs the tx with
-  // it visible to the wallet.
   const publicCoin = disclose(coin);
   assert(publicCoin.color == nativeToken(), "must pay with native NIGHT");
-  receiveShielded(publicCoin);
-
-  const publicSide = disclose(side);
+  assert(publicCoin.value <= 18446744073709551615, "stake too large");
+  const publicStake = publicCoin.value as Uint<64>;
   const publicAmount = disclose(amountOut);
-  const publicCollateral = publicCoin.value;
-  if (publicSide == Side.YES) {
-    assert(reserveYes > publicAmount, "insufficient YES liquidity");
-    reserveYes = reserveYes - publicAmount;
-    reserveNo = (reserveNo + publicCollateral) as Uint<128>;
-  } else {
-    assert(reserveNo > publicAmount, "insufficient NO liquidity");
-    reserveNo = reserveNo - publicAmount;
-    reserveYes = (reserveYes + publicCollateral) as Uint<128>;
-  }
-
-  // Track collateral as a single contract-held coin. The first buy
-  // writes it; subsequent buys merge into it so a later `redeem` can
-  // pay winners by splitting one big coin via `sendShielded`.
-  const selfRecipient = right<ZswapCoinPublicKey, ContractAddress>(kernel.self());
-  if (pool.value == 0) {
-    pool.writeCoin(publicCoin, selfRecipient);
-  } else {
-    pool.writeCoin(mergeCoinImmediate(pool, publicCoin), selfRecipient);
-  }
-
+  assert(publicStake > 0, "stake must be positive");
+  assert(publicAmount > 0, "amount must be positive");
+  const publicSide = disclose(side);
+  const k = reserveYes * reserveNo;
   const sk = localSecretKey();
   const nonce = positionNonce();
-  const c = disclose(commitment(sk, nonce, publicSide, publicAmount));
-  positions.insert(c);
-  return c;
+  if (publicSide == Side.YES) {
+    const newReserveNo = (reserveNo + publicStake) as Uint<64>;
+    assert(reserveYes > publicAmount, "insufficient YES liquidity");
+    const newReserveYes = reserveYes - publicAmount;
+    assert(newReserveYes * newReserveNo >= k, "amount exceeds CPMM quote");
+    reserveYes = reserveYes - publicAmount;
+    reserveNo = newReserveNo;
+    receiveShielded(publicCoin);
+    acceptStake(publicCoin);
+    const c = disclose(commitment(sk, nonce, publicSide, publicStake));
+    positions.insert(c);
+    return publicStake;
+  } else {
+    const newReserveYes = (reserveYes + publicStake) as Uint<64>;
+    assert(reserveNo > publicAmount, "insufficient NO liquidity");
+    const newReserveNo = reserveNo - publicAmount;
+    assert(newReserveYes * newReserveNo >= k, "amount exceeds CPMM quote");
+    reserveNo = reserveNo - publicAmount;
+    reserveYes = newReserveYes;
+    receiveShielded(publicCoin);
+    acceptStake(publicCoin);
+    const c = disclose(commitment(sk, nonce, publicSide, publicStake));
+    positions.insert(c);
+    return publicStake;
+  }
 }
 
 // ----------------- Resolution -----------------
@@ -126,20 +117,19 @@ export circuit resolve(side: Side, nowTs: Uint<64>): [] {
   status = Status.RESOLVED;
 }
 
-// Privately redeem a winning position for tNIGHT. The user proves
+// Privately claim a winning position. The user proves
 // ownership of an existing commitment without revealing their identity
 // (no per-user indexing on chain), then publishes a one-shot nullifier
-// so they can't redeem the same position twice. Each winning share
-// pays 1 atomic NIGHT out of the pool that was funded by buyers.
-export circuit redeem(side: Side, amountOut: Uint<128>): Uint<128> {
+// so they can't claim the same position twice. The payout is the stake
+// amount committed in `buy`, capped by the contract-held NIGHT pool.
+export circuit redeem(side: Side, stakeAmount: Uint<64>): Uint<64> {
   assert(status == Status.RESOLVED, "market not resolved");
   const publicSide = disclose(side);
-  const publicAmount = disclose(amountOut);
+  const publicAmount = disclose(stakeAmount);
   assert(outcome == publicSide, "wrong side");
 
-  // Verify the caller actually holds this position before checking
-  // the pool balance — otherwise the error message ("insufficient
-  // pool") leaks treasury state to a non-holder.
+  // Verify the caller actually holds this position before publishing
+  // the nullifier, so non-holders cannot mark arbitrary claims spent.
   const sk = localSecretKey();
   const nonce = positionNonce();
   const c = disclose(commitment(sk, nonce, publicSide, publicAmount));
@@ -147,28 +137,18 @@ export circuit redeem(side: Side, amountOut: Uint<128>): Uint<128> {
   const n = disclose(nullifier(sk, nonce, publicSide, publicAmount));
   assert(!nullifiers.member(n), "already redeemed");
   nullifiers.insert(n);
-
   assert(pool.value >= publicAmount, "insufficient pool");
-
-  // Pay the caller from the pool. sendShielded auto-creates a change
-  // output back to the contract; we re-bind `pool` to the change so
-  // future redemptions can keep drawing from the same pool.
   const result = sendShielded(
     pool,
     left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey()),
     publicAmount,
   );
-  // result.change is Maybe<ShieldedCoinInfo>: Some(remainder) when
-  // we partially drain, None when we send the entire pool. We only
-  // re-bind on Some — fully draining is acceptable (later redeems
-  // will hit the `pool.value >= publicAmount` assertion above).
   if (result.change.is_some) {
     pool.writeCoin(
       result.change.value,
       right<ZswapCoinPublicKey, ContractAddress>(kernel.self()),
     );
   }
-
   return publicAmount;
 }
 
@@ -176,7 +156,7 @@ export circuit redeem(side: Side, amountOut: Uint<128>): Uint<128> {
 // Internal — take sk + nonce as parameters so callers stay in charge of
 // when witness values get hashed and disclosed.
 
-circuit commitment(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128>): Bytes<32> {
+circuit commitment(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<64>): Bytes<32> {
   return persistentHash<Vector<5, Bytes<32>>>([
     pad(32, "cocoa:pos:"),
     sk,
@@ -186,7 +166,7 @@ circuit commitment(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128
   ]);
 }
 
-circuit nullifier(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128>): Bytes<32> {
+circuit nullifier(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<64>): Bytes<32> {
   return persistentHash<Vector<5, Bytes<32>>>([
     pad(32, "cocoa:null:"),
     sk,
@@ -194,6 +174,16 @@ circuit nullifier(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<128>
     amount as Field as Bytes<32>,
     side as Field as Bytes<32>,
   ]);
+}
+
+circuit acceptStake(coin: ShieldedCoinInfo): [] {
+  const selfRecipient = right<ZswapCoinPublicKey, ContractAddress>(kernel.self());
+  if (pool.value == 0) {
+    pool.writeCoin(coin, selfRecipient);
+  } else {
+    pool.writeCoin(mergeCoinImmediate(pool, coin), selfRecipient);
+  }
+  volume = (volume + coin.value) as Uint<64>;
 }
 
 // Public commitment to an oracle secret.  `H("cocoa:oracle:" || sk)`.

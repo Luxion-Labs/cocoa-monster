@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
 import App from "./App";
+import { WalletProvider } from "./hooks/useWallet";
 import { ensureNetwork } from "./lib/network";
 import "./styles.css";
 
@@ -17,7 +18,9 @@ ensureNetwork();
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <WalletProvider>
+        <App />
+      </WalletProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

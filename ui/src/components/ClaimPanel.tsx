@@ -29,7 +29,7 @@ export const ClaimPanel = ({ api, state }: Props) => {
 
   useEffect(() => {
     void refresh();
-    // Re-poll whenever the contract state changes — a successful redeem
+    // Re-poll whenever the contract state changes — a successful claim
     // updates `nullifiers`, which fires a new state tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, state.nullifierCount]);
@@ -75,7 +75,7 @@ export const ClaimPanel = ({ api, state }: Props) => {
               data-testid="claim-panel-item"
             >
               <span>
-                {formatSide(p.side)} · {formatBigInt(p.amount)} shares
+                {formatSide(p.side)} · {formatBigInt(p.amount)} NIGHT staked
               </span>
               {canClaim ? (
                 <button
@@ -85,7 +85,7 @@ export const ClaimPanel = ({ api, state }: Props) => {
                   className="btn btn--primary"
                   data-testid="claim-panel-redeem"
                 >
-                  {loadingNonce === p.nonce ? "Claiming…" : "Claim"}
+                  {loadingNonce === p.nonce ? "Marking…" : "Mark claimed"}
                 </button>
               ) : state.status === Status.RESOLVED ? (
                 <span className="claim-panel__status">Lost</span>

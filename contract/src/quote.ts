@@ -37,32 +37,34 @@ export const decodeCocoaState = (l: Ledger): CocoaState => {
 };
 
 /**
- * Compute the AMM amount-out a buyer would receive, given their collateral.
+ * Compute the AMM amount-out a buyer would receive, given their stake.
  *
  * The reserves move as `reserveYes * reserveNo = k`. After paying
- * `collateralIn` to the LP, the post-state for buying YES is:
- *   reserveNo' = reserveNo + collateralIn
- *   reserveYes' = k / reserveNo'
+ * `stakeIn` to the opposite reserve, the post-state for buying YES is:
+ *   reserveNo' = reserveNo + stakeIn
+ *   reserveYes' = ceil(k / reserveNo')
  *   amountOut = reserveYes - reserveYes'
  *
- * Computed in BigInt with floor division. The resulting `amountOut` is
- * always strictly less than the YES reserve, satisfying the contract's
- * `reserveYes > amountOut` assertion.
+ * Computed in BigInt with ceiling division for the post-trade reserve.
+ * That keeps the contract-side invariant check conservative:
+ * `reserveYes' * reserveNo' >= k`.
  */
+const divCeil = (n: bigint, d: bigint): bigint => (n + d - 1n) / d;
+
 export const quoteAmountOut = (
   reserveYes: bigint,
   reserveNo: bigint,
   side: Side,
-  collateralIn: bigint,
+  stakeIn: bigint,
 ): bigint => {
-  if (collateralIn <= 0n) return 0n;
+  if (stakeIn <= 0n) return 0n;
   const k = reserveYes * reserveNo;
   if (side === Side.YES) {
-    const newReserveNo = reserveNo + collateralIn;
-    const newReserveYes = k / newReserveNo;
+    const newReserveNo = reserveNo + stakeIn;
+    const newReserveYes = divCeil(k, newReserveNo);
     return reserveYes - newReserveYes;
   }
-  const newReserveYes = reserveYes + collateralIn;
-  const newReserveNo = k / newReserveYes;
+  const newReserveYes = reserveYes + stakeIn;
+  const newReserveNo = divCeil(k, newReserveYes);
   return reserveNo - newReserveNo;
 };

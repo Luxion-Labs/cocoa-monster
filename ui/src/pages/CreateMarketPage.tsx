@@ -3,22 +3,15 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useWallet } from "../hooks/useWallet";
-import { useWalletBalances } from "../hooks/useWalletBalances";
 import { buildCocoaProviders } from "../lib/providers";
 import { rememberMarket } from "../lib/markets";
 import { explainError } from "../lib/errors";
-import { WalletConnect } from "../components/WalletConnect";
 
 const DEFAULT_LIQUIDITY = "1000";
 
 export const CreateMarketPage = () => {
   const wallet = useWallet();
   const navigate = useNavigate();
-  const connectedApi =
-    wallet.status.kind === "connected"
-      ? wallet.status.connection.connected
-      : null;
-  const { balances, isLoading: isLoadingBalances, refresh } = useWalletBalances(connectedApi);
   
   const [question, setQuestion] = useState("");
   const [liquidity, setLiquidity] = useState(DEFAULT_LIQUIDITY);
@@ -108,15 +101,7 @@ export const CreateMarketPage = () => {
       </header>
       {!wallet.connection ? (
         <div className="empty-state">
-          <p>Connect a Lace wallet to deploy a new market.</p>
-          <WalletConnect
-            status={wallet.status}
-            balances={balances}
-            isLoadingBalances={isLoadingBalances}
-            onConnect={wallet.connect}
-            onDisconnect={wallet.disconnect}
-            onRefreshBalances={refresh}
-          />
+          <p>Connect wallet from the top bar to deploy a new market.</p>
         </div>
       ) : (
         <form onSubmit={submit} className="create-market__form" data-testid="create-market-form">

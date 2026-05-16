@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { quoteAmountOut } from "../quote.js";
 import { CocoaSimulator, Side, Status } from "./cocoa-simulator.js";
 
 const initial = (
@@ -33,10 +34,12 @@ describe("Cocoa contract — buy circuit", () => {
     const sim = initial();
     const before = sim.ledger();
 
-    sim.buy(Side.YES, 100n, 50n);
+    const quote = 90n;
+    const stake = sim.buy(Side.YES, 100n, quote);
 
     const after = sim.ledger();
-    expect(after.reserveYes).toBe(before.reserveYes - 50n);
+    expect(stake).toBe(100n);
+    expect(after.reserveYes).toBe(before.reserveYes - quote);
     expect(after.reserveNo).toBe(before.reserveNo + 100n);
     expect(after.positions.size()).toBe(1n);
     expect(after.nullifiers.isEmpty()).toBe(true);
@@ -44,29 +47,29 @@ describe("Cocoa contract — buy circuit", () => {
 
   it("burns NO reserve and grows YES reserve when buying NO", () => {
     const sim = initial();
-    sim.buy(Side.NO, 200n, 80n);
+    const quote = 166n;
+    const stake = sim.buy(Side.NO, 200n, quote);
 
     const after = sim.ledger();
+    expect(stake).toBe(200n);
     expect(after.reserveYes).toBe(1000n + 200n);
-    expect(after.reserveNo).toBe(1000n - 80n);
+    expect(after.reserveNo).toBe(1000n - quote);
     expect(after.positions.size()).toBe(1n);
   });
 
-  it("returns a 32-byte commitment per position", () => {
+  it("returns the paid stake amount", () => {
     const sim = initial();
-    const commitment = sim.buy(Side.YES, 100n, 50n);
-    expect(commitment).toBeInstanceOf(Uint8Array);
-    expect(commitment.byteLength).toBe(32);
+    expect(sim.buy(Side.YES, 100n, 90n)).toBe(100n);
   });
 
-  it("rejects a buy that would drain the YES reserve", () => {
+  it("rejects a buy when the UI quote is too optimistic", () => {
     const sim = initial();
-    expect(() => sim.buy(Side.YES, 5_000n, 1_000n)).toThrow(/insufficient YES liquidity/);
+    expect(() => sim.buy(Side.YES, 100n, 91n)).toThrow(/amount exceeds CPMM quote/);
   });
 
-  it("rejects a buy that would drain the NO reserve", () => {
+  it("rejects a buy when stake is not positive", () => {
     const sim = initial();
-    expect(() => sim.buy(Side.NO, 5_000n, 1_000n)).toThrow(/insufficient NO liquidity/);
+    expect(() => sim.buy(Side.NO, 0n, 0n)).toThrow(/stake must be positive/);
   });
 
   it("supports many sequential buys with monotonic price drift", () => {
@@ -77,7 +80,12 @@ describe("Cocoa contract — buy circuit", () => {
     // amount) is deterministic, so identical buys would collide in the
     // positions set and accidentally hide a real position.
     for (let i = 0; i < 5; i++) {
-      sim.buy(Side.YES, 100n, BigInt(50 + i));
+      const before = sim.ledger();
+      sim.buy(
+        Side.YES,
+        100n,
+        quoteAmountOut(before.reserveYes, before.reserveNo, Side.YES, 100n),
+      );
       const l = sim.ledger();
       const priceYes =
         Number(l.reserveNo) / Number(l.reserveYes + l.reserveNo);
@@ -88,15 +96,13 @@ describe("Cocoa contract — buy circuit", () => {
     expect(sim.ledger().positions.size()).toBe(5n);
   });
 
-  it("collapses identical (side, amount) buys into one commitment", () => {
-    // Sanity: H(sk, nonce, side, amount) is deterministic, so a buyer who
-    // buys the same shape twice with the same private state produces a
-    // single commitment. The privacy model requires nonce rotation per
-    // position to avoid this collision; this test pins that contract.
+  it("records sequential buys when the resulting positions differ", () => {
     const sim = initial({ initialLiquidity: 10_000n });
-    sim.buy(Side.YES, 100n, 50n);
-    sim.buy(Side.YES, 100n, 50n);
-    expect(sim.ledger().positions.size()).toBe(1n);
+    let l = sim.ledger();
+    sim.buy(Side.YES, 100n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.YES, 100n));
+    l = sim.ledger();
+    sim.buy(Side.NO, 101n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 101n));
+    expect(sim.ledger().positions.size()).toBe(2n);
   });
 });
 
@@ -132,28 +138,28 @@ describe("Cocoa contract — oracle resolution", () => {
   it("rejects buy after resolve", () => {
     const sim = initial({ closeTime: 1_000n });
     sim.resolve(Side.YES, 1_000n);
-    expect(() => sim.buy(Side.YES, 100n, 50n)).toThrow(/market not open/);
+    expect(() => sim.buy(Side.YES, 100n, 0n)).toThrow(/market not open/);
   });
 });
 
 describe("Cocoa contract — redeem circuit", () => {
   it("rejects redeem before resolution", () => {
     const sim = initial();
-    sim.buy(Side.YES, 100n, 50n);
-    expect(() => sim.redeem(Side.YES, 50n)).toThrow(/market not resolved/);
+    const amountOut = sim.buy(Side.YES, 100n, 90n);
+    expect(() => sim.redeem(Side.YES, amountOut)).toThrow(/market not resolved/);
   });
 
   it("rejects redeem on the losing side", () => {
     const sim = initial({ closeTime: 1_000n });
-    sim.buy(Side.YES, 100n, 50n);
+    const amountOut = sim.buy(Side.YES, 100n, 90n);
     sim.resolve(Side.NO, 1_000n);
 
-    expect(() => sim.redeem(Side.YES, 50n)).toThrow(/wrong side/);
+    expect(() => sim.redeem(Side.YES, amountOut)).toThrow(/wrong side/);
   });
 
   it("rejects redeem when the buyer has no matching position", () => {
     const sim = initial({ closeTime: 1_000n });
-    sim.buy(Side.YES, 100n, 50n);
+    sim.buy(Side.YES, 100n, 90n);
     sim.resolve(Side.YES, 1_000n);
 
     // Wrong amount → commitment mismatch.
@@ -162,28 +168,28 @@ describe("Cocoa contract — redeem circuit", () => {
 
   it("redeems a winning position once and emits a nullifier", () => {
     const sim = initial({ closeTime: 1_000n });
-    sim.buy(Side.YES, 100n, 50n);
+    const amountOut = sim.buy(Side.YES, 100n, 90n);
     sim.resolve(Side.YES, 1_000n);
 
-    const payout = sim.redeem(Side.YES, 50n);
-    expect(payout).toBe(50n);
+    const payout = sim.redeem(Side.YES, amountOut);
+    expect(payout).toBe(amountOut);
     expect(sim.ledger().nullifiers.size()).toBe(1n);
   });
 
   it("blocks double-redeem via the nullifier set", () => {
     const sim = initial({ closeTime: 1_000n });
-    sim.buy(Side.YES, 100n, 50n);
+    const amountOut = sim.buy(Side.YES, 100n, 90n);
     sim.resolve(Side.YES, 1_000n);
-    sim.redeem(Side.YES, 50n);
+    sim.redeem(Side.YES, amountOut);
 
-    expect(() => sim.redeem(Side.YES, 50n)).toThrow(/already redeemed/);
+    expect(() => sim.redeem(Side.YES, amountOut)).toThrow(/already redeemed/);
   });
 });
 
 describe("Cocoa contract — privacy invariants", () => {
   it("does not record buyer identity on the public ledger", () => {
     const sim = initial();
-    sim.buy(Side.YES, 100n, 50n);
+    sim.buy(Side.YES, 100n, 90n);
 
     const l = sim.ledger();
     // The only public artifact of the buy is a 32-byte opaque commitment.

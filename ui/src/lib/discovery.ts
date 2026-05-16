@@ -11,8 +11,41 @@ import { cocoaConfig } from "./network";
 
 export type DiscoveredMarket = KnownMarket & {
   readonly priceYes: number;
-  readonly status: string;
+  readonly status: "OPEN" | "RESOLVED";
   readonly positionCount: bigint;
+};
+
+const isKnownMarket = (value: unknown): value is KnownMarket => {
+  if (typeof value !== "object" || value === null) return false;
+  const m = value as Partial<KnownMarket>;
+  return (
+    typeof m.contractAddress === "string" &&
+    typeof m.question === "string" &&
+    (m.addedAt === undefined || typeof m.addedAt === "number")
+  );
+};
+
+export const fetchRegistryMarkets = async (): Promise<KnownMarket[]> => {
+  const registryUrl = import.meta.env.VITE_MARKET_REGISTRY_URL as
+    | string
+    | undefined;
+  if (!registryUrl) return [];
+
+  const response = await fetch(registryUrl);
+  if (!response.ok) {
+    throw new Error(`registry returned ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const rows = Array.isArray(payload) ? payload : payload?.markets;
+  if (!Array.isArray(rows)) return [];
+
+  const now = Date.now();
+  return rows.filter(isKnownMarket).map((market) => ({
+    contractAddress: market.contractAddress,
+    question: market.question,
+    addedAt: market.addedAt ?? now,
+  }));
 };
 
 /**

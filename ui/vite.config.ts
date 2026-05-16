@@ -5,7 +5,7 @@ import topLevelAwait from "vite-plugin-top-level-await";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 // Vite proxies `/proof-server/*` to the docker proof-server brought up
-// by `just up`. Override with VITE_PROOF_SERVER_UPSTREAM to point at a
+// by `just dev`. Override with VITE_PROOF_SERVER_UPSTREAM to point at a
 // different host (e.g. a remote proof-server you control).
 const proofServerUpstream =
   process.env.VITE_PROOF_SERVER_UPSTREAM ?? "http://localhost:6300";
@@ -27,6 +27,11 @@ export default defineConfig({
         target: proofServerUpstream,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/proof-server/, ""),
+      },
+      "/midnight-artifacts": {
+        target: "https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/midnight-artifacts/, ""),
       },
     },
   },

@@ -1,68 +1,25 @@
 _default:
     @just --list
 
-# Install all workspace dependencies
 install:
     npm install --legacy-peer-deps
 
-# Compile the Compact contract to ZK circuits + TS bindings
 compact:
-    cd contract && npm run compact
+    @if [ ! -f contract/src/managed/cocoa/compiler/contract-info.json ] || [ contract/src/cocoa.compact -nt contract/src/managed/cocoa/compiler/contract-info.json ]; then \
+        nix develop -c sh -c 'cd contract && npm run compact'; \
+    else \
+        echo "compact artifacts are up to date"; \
+    fi
+    @if [ ! -f contract/dist/index.js ] || find contract/src -name '*.ts' -newer contract/dist/index.js | grep -q . || [ contract/src/managed/cocoa/compiler/contract-info.json -nt contract/dist/index.js ]; then \
+        nix develop -c sh -c 'cd contract && npm run build'; \
+    else \
+        echo "contract build is up to date"; \
+    fi
 
-# Build contract TS package after compilation
-build-contract: compact
-    cd contract && npm run build
-
-# Build the production UI bundle
-build-ui:
-    cd ui && npm run build
-
-# Build everything end-to-end
-build: build-contract build-ui
-
-# Run the contract simulator tests + UI component tests
-test:
-    cd contract && npm test
-    cd ui && npm test
-
-# Run the UI dev server (Vite)
-ui:
-    cd ui && npm run dev
-
-# Bring up local infra (proof server, etc.)
-up:
-    docker compose up -d
-
-# Tear down local infra
-down:
-    docker compose down -v
-
-# Boot every dev process (UI, proof server, ...) under one roof
-dev:
+# Compile the contract, start the proof server, and boot the UI.
+dev: install compact
     overmind start
 
-# Build the cocoa-monster Docker image via nix (matches what CI ships)
-# and load it into the local docker daemon as `cocoa-monster:latest`.
-docker-image:
-    nix build .#docker-image -o result
-    docker load -i result
-
-# Push the Concourse pipeline (set FLY_TARGET to override target name)
-repipe:
-    ./ci/repipe
-
-# Lint the helm chart so a stray template syntax error doesn't slip
-# through to the deployments-side tofu apply.
-helm-lint:
-    helm lint charts/cocoa-monster
-
-# Render the chart with the testflight values for offline review.
-helm-template:
-    helm template cocoa-monster charts/cocoa-monster -f ci/testflight/values.yaml
-
-# Remove build artifacts, generated ZK outputs, and node_modules.
-clean:
-    rm -rf contract/dist ui/dist ui/.vite
-    rm -rf contract/src/managed
-    rm -rf ui/public/keys ui/public/zkir
-    rm -rf node_modules contract/node_modules ui/node_modules
+test: compact
+    cd contract && npm test
+    cd ui && npm test

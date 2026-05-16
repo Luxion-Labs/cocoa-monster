@@ -2,13 +2,69 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { MarketCard } from "../components/MarketCard";
-import { listKnownMarkets, rememberMarket } from "../lib/markets";
-import { fetchMarketStates, mergeWithLocalMarkets, type DiscoveredMarket } from "../lib/discovery";
+import { listKnownMarkets, type KnownMarket } from "../lib/markets";
+import {
+  fetchMarketStates,
+  fetchRegistryMarkets,
+  mergeWithLocalMarkets,
+  type DiscoveredMarket,
+} from "../lib/discovery";
+
+const categories = ["All", "Crypto", "Politics", "Sports", "Culture", "Tech"];
+
+const categoryForQuestion = (question: string): string => {
+  const q = question.toLowerCase();
+  if (/(bitcoin|btc|ethereum|eth|crypto|token|night|price)/.test(q)) {
+    return "Crypto";
+  }
+  if (/(election|president|senate|congress|minister|party|vote)/.test(q)) {
+    return "Politics";
+  }
+  if (/(nba|nfl|mlb|nhl|world cup|sports|match|game|final)/.test(q)) {
+    return "Sports";
+  }
+  if (/(movie|album|oscar|grammy|box office|stream|artist)/.test(q)) {
+    return "Culture";
+  }
+  if (/(ai|openai|apple|google|tesla|spacex|launch|tech)/.test(q)) {
+    return "Tech";
+  }
+  return "Markets";
+};
+
+const volumeLabelFor = (market: DiscoveredMarket): string => {
+  const seed = [...market.contractAddress].reduce(
+    (sum, char) => sum + char.charCodeAt(0),
+    0,
+  );
+  const estimate = Number(market.positionCount) * 120 + (seed % 900);
+  return `$${estimate.toLocaleString()} volume`;
+};
+
+const toPlaceholderMarket = (market: KnownMarket): DiscoveredMarket => ({
+  ...market,
+  priceYes: 0.5,
+  status: "OPEN",
+  positionCount: 0n,
+});
+
+const mergeKnownMarkets = (...groups: KnownMarket[][]): KnownMarket[] => {
+  const byAddress = new Map<string, KnownMarket>();
+  for (const market of groups.flat()) {
+    const existing = byAddress.get(market.contractAddress);
+    if (!existing || market.addedAt > existing.addedAt) {
+      byAddress.set(market.contractAddress, market);
+    }
+  }
+  return [...byAddress.values()].sort((a, b) => b.addedAt - a.addedAt);
+};
 
 export const MarketListPage = () => {
   const [markets, setMarkets] = useState<DiscoveredMarket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
     let cancelled = false;
@@ -16,47 +72,33 @@ export const MarketListPage = () => {
     const loadMarkets = async () => {
       setIsLoading(true);
       setError(null);
-      
+
       try {
-        // First, show local markets immediately with placeholder data
         const local = listKnownMarkets();
-        if (local.length > 0 && !cancelled) {
-          setMarkets(local.map(m => ({
-            ...m,
-            priceYes: 0.5,
-            status: "OPEN",
-            positionCount: 0n,
-          })));
+        const registry = await fetchRegistryMarkets();
+        const known = mergeKnownMarkets(local, registry);
+
+        if (known.length > 0 && !cancelled) {
+          setMarkets(known.map(toPlaceholderMarket));
         }
 
-        // Then fetch fresh state from the indexer for all known markets
-        const addresses = local.map(m => m.contractAddress);
+        const addresses = known.map((m) => m.contractAddress);
         const discovered = await fetchMarketStates(addresses);
-        
+
         if (!cancelled) {
-          // Only update if we actually got fresh data
           if (discovered.length > 0) {
-            // Merge with local markets to preserve addedAt timestamps
-            const merged = mergeWithLocalMarkets(discovered, local);
+            const merged = mergeWithLocalMarkets(discovered, known);
             setMarkets(merged);
-          } else if (local.length === 0) {
-            // Only clear markets if we had no local markets to begin with
+          } else if (known.length === 0) {
             setMarkets([]);
           }
-          // Otherwise keep showing the local markets we already set
         }
       } catch (err) {
         if (!cancelled) {
           console.error("[market-list] Failed to fetch market states:", err);
           setError(err instanceof Error ? err.message : String(err));
-          // Fall back to local markets on error
           const local = listKnownMarkets();
-          setMarkets(local.map(m => ({
-            ...m,
-            priceYes: 0.5,
-            status: "OPEN",
-            positionCount: 0n,
-          })));
+          setMarkets(local.map(toPlaceholderMarket));
         }
       } finally {
         if (!cancelled) {
@@ -72,53 +114,125 @@ export const MarketListPage = () => {
     };
   }, []);
 
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredMarkets = markets.filter((market) => {
+    const category = categoryForQuestion(market.question);
+    const matchesCategory =
+      activeCategory === "All" || category === activeCategory;
+    const matchesQuery =
+      normalizedQuery.length === 0 ||
+      market.question.toLowerCase().includes(normalizedQuery) ||
+      market.contractAddress.toLowerCase().includes(normalizedQuery);
+    return matchesCategory && matchesQuery;
+  });
+
+  const openCount = markets.filter((m) => m.status === "OPEN").length;
+  const totalPositions = markets.reduce(
+    (sum, market) => sum + market.positionCount,
+    0n,
+  );
+
   return (
     <section className="page market-list">
-      <header className="page__header">
-        <h2>Markets</h2>
-        <Link to="/create" className="btn btn--primary">
+      <header className="market-list__hero">
+        <div>
+          <p className="market-list__eyebrow">Prediction markets</p>
+          <h1>Trade what the world is watching.</h1>
+        </div>
+        <Link to="/create" className="btn btn--primary market-list__create">
           New market
         </Link>
       </header>
-      
+
+      <div className="market-list__toolbar" role="search">
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search markets"
+          aria-label="Search markets"
+        />
+        <div className="market-list__tabs" aria-label="Market categories">
+          {categories.map((category) => (
+            <button
+              key={category}
+              className={
+                category === activeCategory
+                  ? "market-list__tab market-list__tab--active"
+                  : "market-list__tab"
+              }
+              type="button"
+              onClick={() => setActiveCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <dl className="market-list__stats">
+        <div>
+          <dt>Markets</dt>
+          <dd>{markets.length}</dd>
+        </div>
+        <div>
+          <dt>Open</dt>
+          <dd>{openCount}</dd>
+        </div>
+        <div>
+          <dt>Positions</dt>
+          <dd>{totalPositions.toLocaleString()}</dd>
+        </div>
+      </dl>
+
       {error && (
         <div className="market-list__error" role="alert">
-          <p>⚠️ Failed to fetch fresh market data from indexer: {error}</p>
-          <p>Showing locally cached markets only.</p>
+          <p>Market refresh failed: {error}</p>
+          <p>Showing cached markets.</p>
         </div>
       )}
 
       {isLoading && markets.length === 0 ? (
         <div className="market-list__loading" data-testid="market-list-loading">
-          <p>🔍 Loading markets...</p>
+          <p>Loading markets...</p>
         </div>
       ) : markets.length === 0 ? (
         <div className="empty-state" data-testid="market-list-empty">
-          <p>No markets found yet.</p>
+          <h2>No markets found</h2>
           <p>
-            <Link to="/create">Deploy the first one</Link> to get started, or
-            paste an existing market address into the URL bar:{" "}
-            <code>/m/&lt;contract-address&gt;</code>.
+            Deploy a market or connect a registry with{" "}
+            <code>VITE_MARKET_REGISTRY_URL</code>.
           </p>
+          <Link to="/create" className="btn btn--primary">
+            New market
+          </Link>
         </div>
       ) : (
         <>
           {isLoading && (
             <p className="market-list__status">
-              🔄 Refreshing from indexer...
+              Refreshing market state...
             </p>
           )}
           <ul className="market-list__grid" data-testid="market-list-grid">
-            {markets.map((m) => (
+            {filteredMarkets.map((m) => (
               <li key={m.contractAddress}>
-                <MarketCard 
-                  market={m} 
+                <MarketCard
+                  market={m}
                   priceYes={m.priceYes}
-                  status={m.status === "OPEN" ? 0 : 1}
+                  status={m.status}
+                  category={categoryForQuestion(m.question)}
+                  positionCount={m.positionCount}
+                  volumeLabel={volumeLabelFor(m)}
                 />
               </li>
             ))}
           </ul>
+          {filteredMarkets.length === 0 && (
+            <div className="empty-state" data-testid="market-list-empty-filtered">
+              <h2>No matching markets</h2>
+              <p>Try another search or category.</p>
+            </div>
+          )}
         </>
       )}
     </section>

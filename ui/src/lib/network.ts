@@ -10,7 +10,7 @@ export type CocoaConfig = {
   readonly indexerUri: string;
   /** Indexer GraphQL WebSocket endpoint for live state subscriptions. */
   readonly indexerWsUri: string;
-  /** Local proof server URL — `just up` brings this up at this address. */
+  /** Local proof server URL — `just dev` brings this up at this address. */
   readonly proofServerUri: string;
   /**
    * Where the contract's verifier keys, prover keys, and ZK IR live.
@@ -23,10 +23,13 @@ export type CocoaConfig = {
 const fromEnv = (key: string, fallback: string): string =>
   (import.meta.env?.[key] as string | undefined) ?? fallback;
 
+const appOrigin = (): string =>
+  typeof window === "undefined" ? "http://localhost:5173" : window.location.origin;
+
 export const cocoaConfig: CocoaConfig = {
   // Midnight's networkId enum values in 4.x: "undeployed" | "mainnet"
   // | "preview" | "preprod". Default to `preprod` since that's where the
-  // current TestNet faucet is dropping tNIGHT for this dapp.
+  // current TestNet wallet tooling targets preprod for this dapp.
   networkId: fromEnv("VITE_NETWORK_ID", "preprod"),
   indexerUri: fromEnv(
     "VITE_INDEXER_URI",
@@ -36,17 +39,12 @@ export const cocoaConfig: CocoaConfig = {
     "VITE_INDEXER_WS_URI",
     "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
   ),
-  // Midnight Foundation's public preprod proof-server. Returns CORS
-  // headers for arbitrary browser origins and tracks the ledger-v8
-  // wire format (it reports version 8.0.3, matching our ledger-v8
-  // dependency). We used to self-host an older `midnightnetwork/
-  // proof-server:latest` (stuck at 7.0.0-rc.1, no published 8.x image),
-  // but that introduced wire-format skew with ledger-v8. Override with
-  // VITE_PROOF_SERVER_URI for local dev against `just up`'s docker
-  // proof-server.
+  // Same-origin Vite proxy to the local proof server started by `just dev`.
+  // This avoids browser CORS failures and keeps proving on the same LAN
+  // origin used to load the app.
   proofServerUri: fromEnv(
     "VITE_PROOF_SERVER_URI",
-    "https://proof-server.preprod.midnight.network",
+    `${appOrigin()}/proof-server`,
   ),
   // FetchZkConfigProvider serves keys at `${baseURL}/keys/{circuit}.prover`
   // and zkir at `${baseURL}/zkir/{circuit}.bzkir`. We symlink the
@@ -54,9 +52,7 @@ export const cocoaConfig: CocoaConfig = {
   // them at the web origin's root.
   zkConfigBaseUri: fromEnv(
     "VITE_ZK_CONFIG_URI",
-    typeof window === "undefined"
-      ? "http://localhost:5173"
-      : window.location.origin,
+    appOrigin(),
   ),
 };
 

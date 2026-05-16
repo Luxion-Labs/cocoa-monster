@@ -11,17 +11,18 @@ vi.mock("cocoa-contract", () => ({
     reserveYes: bigint,
     reserveNo: bigint,
     side: number,
-    collateralIn: bigint,
+    stakeIn: bigint,
   ): bigint => {
-    if (collateralIn <= 0n) return 0n;
+    if (stakeIn <= 0n) return 0n;
     const k = reserveYes * reserveNo;
+    const divCeil = (n: bigint, d: bigint): bigint => (n + d - 1n) / d;
     if (side === 0) {
-      const newReserveNo = reserveNo + collateralIn;
-      const newReserveYes = k / newReserveNo;
+      const newReserveNo = reserveNo + stakeIn;
+      const newReserveYes = divCeil(k, newReserveNo);
       return reserveYes - newReserveYes;
     }
-    const newReserveYes = reserveYes + collateralIn;
-    const newReserveNo = k / newReserveYes;
+    const newReserveYes = reserveYes + stakeIn;
+    const newReserveNo = divCeil(k, newReserveYes);
     return reserveNo - newReserveNo;
   },
 }));
@@ -55,17 +56,17 @@ const baseState: CocoaState = {
 };
 
 describe("BetForm", () => {
-  it("computes a non-zero quote for valid collateral", () => {
+  it("computes a non-zero quote for valid stake", () => {
     render(<BetForm api={fakeApi()} state={baseState} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "200" },
     });
     expect(screen.getByTestId("bet-form-quote").textContent).toMatch(
-      /You receive\s*\d+\s*YES shares/,
+      /Market exposure\s*\d+\s*YES units/,
     );
   });
 
-  it("disables the submit button when collateral is invalid", () => {
+  it("disables the submit button when stake is invalid", () => {
     render(<BetForm api={fakeApi()} state={baseState} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "abc" },
@@ -81,12 +82,12 @@ describe("BetForm", () => {
       target: { value: "100" },
     });
     expect(screen.getByTestId("bet-form-quote").textContent).toMatch(
-      /YES shares/,
+      /YES units/,
     );
 
     fireEvent.click(screen.getByTestId("bet-form-side-no"));
     expect(screen.getByTestId("bet-form-quote").textContent).toMatch(
-      /NO shares/,
+      /NO units/,
     );
   });
 
@@ -99,11 +100,11 @@ describe("BetForm", () => {
     fireEvent.submit(screen.getByTestId("bet-form"));
 
     expect(api.buy).toHaveBeenCalledTimes(1);
-    const [side, collateral, amountOut] = (
+    const [side, stake, amountOut] = (
       api.buy as ReturnType<typeof vi.fn>
     ).mock.calls[0];
     expect(side).toBe(Side.YES);
-    expect(collateral).toBe(100n);
+    expect(stake).toBe(100n);
     expect(amountOut).toBeGreaterThan(0n);
   });
 

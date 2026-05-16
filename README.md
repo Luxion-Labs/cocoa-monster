@@ -2,11 +2,11 @@
 
 A privacy-first prediction market built on **Midnight**.
 
-Bet on real-world events — elections, crypto prices, sports — using **$NIGHT**. Individual positions, amounts, and identities stay private through zero-knowledge proofs, while market prices and resolutions remain publicly verifiable.
+Bet on real-world events — elections, crypto prices, sports — on **Midnight**. Individual positions, amounts, and identities stay private through zero-knowledge proofs, while market prices and resolutions remain publicly verifiable.
 
-- **Pricing.** Each market is a constant-product market maker (CPMM): `reserveYes * reserveNo = k`. Buying YES burns YES reserve and grows NO reserve in proportion to the collateral deposited; price floats accordingly, and a live chart can be derived from on-chain pool deltas.
+- **Pricing.** Each market is a constant-product market maker (CPMM): `reserveYes * reserveNo = k`. Buying YES burns YES reserve and grows NO reserve in proportion to the stake units entered; price floats accordingly, and a live chart can be derived from on-chain reserve deltas.
 - **Privacy.** Positions are committed on-chain as `H(secret, nonce, side, amount)`. Identity, side, and size are hidden; redemption reveals only a one-shot nullifier.
-- **Resolution.** An optimistic oracle: anyone can propose an outcome after `closeTime`; if no dispute lands within `disputeWindow`, the market settles to that outcome and winners can redeem.
+- **Resolution.** The deployer is the trusted oracle. After `closeTime`, the oracle can resolve the market and winning positions can be marked claimed once.
 
 Sweet name, sharp odds.
 
@@ -24,14 +24,11 @@ cocoa-monster/
 
 ## Quickstart
 
-Prerequisites: [Nix](https://nixos.org/download) with flakes, [direnv](https://direnv.net/), [Docker](https://www.docker.com/), the [Compact compiler](https://github.com/midnightntwrk/compact/releases), and the [Lace wallet](https://chromewebstore.google.com/detail/lace-beta/hgeekaiplokcnmakghbdfbgnlfheichg) for testnet. Get test tokens from the [Midnight faucet](https://midnight.network/test-faucet/).
+Prerequisites: [Nix](https://nixos.org/download) with flakes, [direnv](https://direnv.net/), Docker, and a Midnight-compatible browser wallet for testnet.
 
 ```sh
 direnv allow             # loads flake + .env
-just install             # install workspace deps
-just compact             # compile the Compact contract
-just up                  # start the local proof server
-overmind start           # boot UI + watchers
+just dev                 # install deps, compile Compact, boot proof server + UI
 ```
 
 The UI is served at `http://localhost:5173`.

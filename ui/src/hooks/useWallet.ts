@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { cocoaConfig } from "../lib/network";
 import {
@@ -21,28 +30,69 @@ export type UseWallet = {
   disconnect(): void;
 };
 
-/**
- * Manages Lace 4.x InitialAPI connection state. On mount, only checks
- * reachability — Lace's 4.x model doesn't have a passive
- * `isAuthorized()` check, so the user explicitly clicks the connect
- * button to call `connect(networkId)`.
- */
-export const useWallet = (): UseWallet => {
+const DISCONNECT_SESSION_KEY = "cocoa.wallet.disconnected";
+
+const safeSessionStorage = (): Storage | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+};
+
+const wasDisconnectedThisSession = (): boolean =>
+  safeSessionStorage()?.getItem(DISCONNECT_SESSION_KEY) === "1";
+
+const rememberSessionDisconnect = (): void => {
+  safeSessionStorage()?.setItem(DISCONNECT_SESSION_KEY, "1");
+};
+
+const clearSessionDisconnect = (): void => {
+  safeSessionStorage()?.removeItem(DISCONNECT_SESSION_KEY);
+};
+
+let autoConnectPromise: Promise<LaceConnection> | null = null;
+
+const autoConnect = (): Promise<LaceConnection> => {
+  autoConnectPromise ??= connectLace(cocoaConfig.networkId).finally(() => {
+    autoConnectPromise = null;
+  });
+  return autoConnectPromise;
+};
+
+const WalletContext = createContext<UseWallet | null>(null);
+
+const useWalletState = (): UseWallet => {
   const [status, setStatus] = useState<WalletStatus>({ kind: "idle" });
 
   useEffect(() => {
     let cancelled = false;
-    setStatus({ kind: "checking" });
+    const autoReconnect = !wasDisconnectedThisSession();
+    setStatus({ kind: autoReconnect ? "connecting" : "checking" });
+
     void isLaceReachable(2_000)
-      .then(() => {
-        if (!cancelled) setStatus({ kind: "idle" });
+      .then(async (reachable) => {
+        if (cancelled) return;
+        if (!reachable) {
+          setStatus({ kind: "idle" });
+          return;
+        }
+        if (!autoReconnect) {
+          setStatus({ kind: "idle" });
+          return;
+        }
+        try {
+          const connection = await autoConnect();
+          if (!cancelled) {
+            setStatus({ kind: "connected", connection });
+          }
+        } catch {
+          if (!cancelled) setStatus({ kind: "idle" });
+        }
       })
-      .catch((err) => {
-        if (!cancelled)
-          setStatus({
-            kind: "error",
-            error: err instanceof Error ? err : new Error(String(err)),
-          });
+      .catch(() => {
+        if (!cancelled) setStatus({ kind: "idle" });
       });
     return () => {
       cancelled = true;
@@ -52,6 +102,7 @@ export const useWallet = (): UseWallet => {
   const connect = useCallback(async (): Promise<void> => {
     setStatus({ kind: "connecting" });
     try {
+      clearSessionDisconnect();
       const connection = await connectLace(cocoaConfig.networkId);
       setStatus({ kind: "connected", connection });
     } catch (err) {
@@ -63,16 +114,33 @@ export const useWallet = (): UseWallet => {
   }, []);
 
   const disconnect = useCallback((): void => {
-    // Lace doesn't expose a programmatic disconnect; the dapp simply
+    // The wallet doesn't expose a programmatic disconnect; the dapp simply
     // forgets the connection. Reconnecting won't show a permission
-    // prompt while the user has the dapp authorized in Lace.
+    // prompt while the user has the dapp authorized.
+    rememberSessionDisconnect();
     setStatus({ kind: "idle" });
   }, []);
 
-  return {
-    status,
-    connection: status.kind === "connected" ? status.connection : null,
-    connect,
-    disconnect,
-  };
+  return useMemo(
+    () => ({
+      status,
+      connection: status.kind === "connected" ? status.connection : null,
+      connect,
+      disconnect,
+    }),
+    [connect, disconnect, status],
+  );
+};
+
+export const WalletProvider = ({ children }: { children: ReactNode }) => {
+  const wallet = useWalletState();
+  return createElement(WalletContext.Provider, { value: wallet }, children);
+};
+
+export const useWallet = (): UseWallet => {
+  const wallet = useContext(WalletContext);
+  if (!wallet) {
+    throw new Error("useWallet must be used within WalletProvider");
+  }
+  return wallet;
 };

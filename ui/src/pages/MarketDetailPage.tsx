@@ -7,12 +7,10 @@ import { BetForm } from "../components/BetForm";
 import { ClaimPanel } from "../components/ClaimPanel";
 import { PriceChart } from "../components/PriceChart";
 import { ResolvePanel } from "../components/ResolvePanel";
-import { WalletConnect } from "../components/WalletConnect";
 import { useCocoaApi } from "../hooks/useCocoaApi";
 import { useCocoaState } from "../hooks/useCocoaState";
 import { useReadOnlyMarketState } from "../hooks/useReadOnlyMarketState";
 import { useWallet } from "../hooks/useWallet";
-import { useWalletBalances } from "../hooks/useWalletBalances";
 import { formatBigInt, formatPriceYes, formatStatus, truncateAddress } from "../lib/format";
 import { rememberMarket } from "../lib/markets";
 import { buildCocoaProviders } from "../lib/providers";
@@ -20,12 +18,6 @@ import { buildCocoaProviders } from "../lib/providers";
 export const MarketDetailPage = () => {
   const { address } = useParams<{ address: string }>();
   const wallet = useWallet();
-
-  const connectedApi =
-    wallet.status.kind === "connected"
-      ? wallet.status.connection.connected
-      : null;
-  const { balances, isLoading: isLoadingBalances, refresh } = useWalletBalances(connectedApi);
 
   const providers = useMemo(
     () => (wallet.connection ? buildCocoaProviders(wallet.connection) : null),
@@ -65,14 +57,6 @@ export const MarketDetailPage = () => {
             {address ? truncateAddress(address, 8, 8) : ""}
           </code>
         </div>
-        <WalletConnect
-          status={wallet.status}
-          balances={balances}
-          isLoadingBalances={isLoadingBalances}
-          onConnect={wallet.connect}
-          onDisconnect={wallet.disconnect}
-          onRefreshBalances={refresh}
-        />
       </header>
 
       {apiState.kind === "error" && (
@@ -124,14 +108,7 @@ export const MarketDetailPage = () => {
           <aside className="market-detail__side">
             {!wallet.connection && state?.status === Status.OPEN && (
               <div className="market-detail__connect-prompt">
-                <p>Connect your wallet to place bets</p>
-                <button
-                  onClick={wallet.connect}
-                  className="btn btn--primary"
-                  disabled={wallet.status.kind === "connecting"}
-                >
-                  {wallet.status.kind === "connecting" ? "Connecting..." : "Connect Wallet"}
-                </button>
+                <p>Connect wallet from the top bar to place bets.</p>
               </div>
             )}
             {api && state.status === Status.OPEN && (

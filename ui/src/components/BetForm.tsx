@@ -8,7 +8,7 @@ type Props = {
   state: CocoaState;
 };
 
-const parseCollateral = (raw: string): bigint | null => {
+const parseStake = (raw: string): bigint | null => {
   if (!/^\d+$/.test(raw.trim())) return null;
   try {
     const value = BigInt(raw.trim());
@@ -20,43 +20,43 @@ const parseCollateral = (raw: string): bigint | null => {
 
 export const BetForm = ({ api, state }: Props) => {
   const [side, setSide] = useState<Side>(Side.YES);
-  const [collateralRaw, setCollateralRaw] = useState("100");
+  const [stakeRaw, setStakeRaw] = useState("100");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const collateral = parseCollateral(collateralRaw);
+  const stake = parseStake(stakeRaw);
 
   const quote = useMemo(() => {
-    if (collateral === null) return null;
-    return quoteAmountOut(state.reserveYes, state.reserveNo, side, collateral);
-  }, [state.reserveYes, state.reserveNo, side, collateral]);
+    if (stake === null) return null;
+    return quoteAmountOut(state.reserveYes, state.reserveNo, side, stake);
+  }, [state.reserveYes, state.reserveNo, side, stake]);
 
   const impliedPriceAfter = useMemo(() => {
-    if (collateral === null || quote === null) return null;
+    if (stake === null || quote === null) return null;
     const newYes =
-      side === Side.YES ? state.reserveYes - quote : state.reserveYes + collateral;
+      side === Side.YES ? state.reserveYes - quote : state.reserveYes + stake;
     const newNo =
-      side === Side.YES ? state.reserveNo + collateral : state.reserveNo - quote;
+      side === Side.YES ? state.reserveNo + stake : state.reserveNo - quote;
     const total = Number(newYes + newNo);
     if (total === 0) return null;
     return Number(newNo) / total;
-  }, [collateral, quote, side, state.reserveYes, state.reserveNo]);
+  }, [stake, quote, side, state.reserveYes, state.reserveNo]);
 
-  const disabled = submitting || collateral === null || quote === null || quote <= 0n;
+  const disabled = submitting || stake === null || quote === null || quote <= 0n;
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (collateral === null || quote === null || quote <= 0n) return;
+    if (stake === null || quote === null || quote <= 0n) return;
     setSubmitting(true);
     setError(null);
     setSuccess(null);
     try {
-      const position = await api.buy(side, collateral, quote);
+      const position = await api.buy(side, stake, quote);
       setSuccess(
-        `Bet submitted: ${formatBigInt(position.amount)} ${
+        `Bet submitted: ${formatBigInt(position.amount)} NIGHT staked on ${
           position.side === Side.YES ? "YES" : "NO"
-        } shares.`,
+        }.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -92,22 +92,23 @@ export const BetForm = ({ api, state }: Props) => {
         </label>
       </div>
       <label className="bet-form__field">
-        <span>Collateral ($NIGHT)</span>
+        <span>Stake units</span>
         <input
           type="text"
           inputMode="numeric"
-          value={collateralRaw}
-          onChange={(e) => setCollateralRaw(e.target.value)}
+          value={stakeRaw}
+          onChange={(e) => setStakeRaw(e.target.value)}
           data-testid="bet-form-collateral"
         />
       </label>
       <div className="bet-form__quote" data-testid="bet-form-quote">
         {quote !== null && quote > 0n ? (
           <>
-            <span>You receive</span>
+            <span>Market exposure</span>
             <strong>
-              {formatBigInt(quote)} {side === Side.YES ? "YES" : "NO"} shares
+              {formatBigInt(quote)} {side === Side.YES ? "YES" : "NO"} units
             </strong>
+            <span>{formatBigInt(stake ?? 0n)} NIGHT escrowed</span>
             {impliedPriceAfter !== null && (
               <span className="bet-form__implied">
                 YES price after: {formatPriceYes(impliedPriceAfter)}
@@ -115,7 +116,7 @@ export const BetForm = ({ api, state }: Props) => {
             )}
           </>
         ) : (
-          <span className="bet-form__quote-empty">Enter a collateral amount</span>
+          <span className="bet-form__quote-empty">Enter a stake amount</span>
         )}
       </div>
       <button

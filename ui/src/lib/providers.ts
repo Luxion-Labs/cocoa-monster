@@ -7,6 +7,8 @@ import { FetchZkConfigProvider } from "@midnight-ntwrk/midnight-js-fetch-zk-conf
 import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
 import { levelPrivateStateProvider } from "@midnight-ntwrk/midnight-js-level-private-state-provider";
+import { createProofProvider } from "@midnight-ntwrk/midnight-js-types";
+import type { KeyMaterialProvider } from "@midnight-ntwrk/midnight-js-types";
 import type {
   FinalizedTransaction,
   TransactionId,
@@ -33,6 +35,147 @@ const fromHex = (hex: string): Uint8Array => {
   }
   return bytes;
 };
+
+const logImbalances = (
+  label: string,
+  tx: { imbalances: (segment: number, fees?: bigint) => Map<unknown, bigint> },
+): void => {
+  try {
+    const format = (m: Map<unknown, bigint>) =>
+      Array.from(m.entries()).map(([token, amount]) => [
+        typeof token === "object" ? JSON.stringify(token) : String(token),
+        amount.toString(),
+      ]);
+    // eslint-disable-next-line no-console
+    console.debug("[cocoa] tx imbalances", label, {
+      segment0: format(tx.imbalances(0)),
+      segment1: format(tx.imbalances(1)),
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.debug("[cocoa] tx imbalance logging failed", label, error);
+  }
+};
+
+const artifactBaseUri = (): string =>
+  `${typeof window === "undefined" ? "http://localhost:5173" : window.location.origin}/midnight-artifacts`;
+
+const artifactPreview = (bytes: Uint8Array): string => {
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(
+    bytes.slice(0, 40),
+  );
+  return text.replace(/\s+/g, " ").slice(0, 40);
+};
+
+const builtinArtifactPath = (
+  circuitKeyLocation: string,
+  ext: "prover" | "verifier" | "bzkir",
+): string | null => {
+  switch (circuitKeyLocation) {
+    case "midnight/zswap/output":
+      return `zswap/9/output.${ext}`;
+    case "midnight/zswap/sign":
+      return `zswap/9/sign.${ext}`;
+    case "midnight/dust/spend":
+      return `dust/9/spend.${ext}`;
+    default:
+      return null;
+  }
+};
+
+const fetchBuiltinArtifact = async (
+  circuitKeyLocation: string,
+  ext: "prover" | "verifier" | "bzkir",
+): Promise<Uint8Array | null> => {
+  const path = builtinArtifactPath(circuitKeyLocation, ext);
+  if (!path) return null;
+  const url = `${artifactBaseUri()}/${path}`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to load ${circuitKeyLocation}.${ext} from ${url}: ${response.status} ${response.statusText}`,
+    );
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const preview = artifactPreview(bytes);
+  if (preview.toLowerCase().includes("<!doctype html")) {
+    throw new Error(
+      `Loaded HTML instead of ${circuitKeyLocation}.${ext} from ${url}. Restart just dev so the /midnight-artifacts proxy is active.`,
+    );
+  }
+  if (
+    ext === "bzkir" &&
+    !preview.startsWith("midnight:ir-source[v2]:")
+  ) {
+    throw new Error(
+      `Invalid ZKIR for ${circuitKeyLocation} from ${url}: expected midnight:ir-source[v2]:, got ${JSON.stringify(preview)}`,
+    );
+  }
+  return bytes;
+};
+
+const withKeyMaterialLogging = (
+  keyMaterialProvider: KeyMaterialProvider,
+): KeyMaterialProvider => ({
+  getZKIR: async (circuitKeyLocation) => {
+    try {
+      const value =
+        (await fetchBuiltinArtifact(circuitKeyLocation, "bzkir")) ??
+        (await keyMaterialProvider.getZKIR(circuitKeyLocation));
+      // eslint-disable-next-line no-console
+      console.debug("[cocoa] loaded zkir", circuitKeyLocation, value.byteLength);
+      return value;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("[cocoa] failed to load zkir", circuitKeyLocation, error);
+      throw error;
+    }
+  },
+  getProverKey: async (circuitKeyLocation) => {
+    try {
+      const value =
+        (await fetchBuiltinArtifact(circuitKeyLocation, "prover")) ??
+        (await keyMaterialProvider.getProverKey(circuitKeyLocation));
+      // eslint-disable-next-line no-console
+      console.debug(
+        "[cocoa] loaded prover key",
+        circuitKeyLocation,
+        value.byteLength,
+      );
+      return value;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[cocoa] failed to load prover key",
+        circuitKeyLocation,
+        error,
+      );
+      throw error;
+    }
+  },
+  getVerifierKey: async (circuitKeyLocation) => {
+    try {
+      const value =
+        (await fetchBuiltinArtifact(circuitKeyLocation, "verifier")) ??
+        await keyMaterialProvider.getVerifierKey(circuitKeyLocation);
+      // eslint-disable-next-line no-console
+      console.debug(
+        "[cocoa] loaded verifier key",
+        circuitKeyLocation,
+        value.byteLength,
+      );
+      return value;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[cocoa] failed to load verifier key",
+        circuitKeyLocation,
+        error,
+      );
+      throw error;
+    }
+  },
+});
 
 /**
  * Build read-only providers for viewing market state without a wallet connection.
@@ -73,12 +216,6 @@ export const buildCocoaProviders = (lace: LaceConnection): CocoaProviders => {
   const indexerUri = lace.configuration.indexerUri ?? cocoaConfig.indexerUri;
   const indexerWsUri =
     lace.configuration.indexerWsUri ?? cocoaConfig.indexerWsUri;
-  // Use whichever URL is configured in `cocoaConfig` (Midnight's public
-  // preprod proof-server by default; see network.ts). Lace's deprecated
-  // `proverServerUri` is ignored — the wallet now does its own proving
-  // inside `balanceUnsealedTransaction` via `getProvingProvider`.
-  const proofServerUri = cocoaConfig.proofServerUri;
-
   const zkConfigProvider = new FetchZkConfigProvider<CocoaCircuitId>(
     cocoaConfig.zkConfigBaseUri,
     typeof window === "undefined"
@@ -102,11 +239,22 @@ export const buildCocoaProviders = (lace: LaceConnection): CocoaProviders => {
     ),
     publicDataProvider: indexerPublicDataProvider(indexerUri, indexerWsUri),
     zkConfigProvider,
-    proofProvider: httpClientProofProvider(proofServerUri, zkConfigProvider),
+    proofProvider: {
+      proveTx: async (unprovenTx, proveTxConfig) => {
+        const provingProvider = await lace.connected.getProvingProvider(
+          withKeyMaterialLogging(zkConfigProvider.asKeyMaterialProvider()),
+        );
+        return createProofProvider(provingProvider).proveTx(
+          unprovenTx,
+          proveTxConfig,
+        );
+      },
+    },
     walletProvider: {
       getCoinPublicKey: () => lace.coinPublicKey,
       getEncryptionPublicKey: () => lace.encryptionPublicKey,
       balanceTx: async (tx, _ttl) => {
+        logImbalances("before wallet balance", tx);
         const serialized = toHex(tx.serialize());
         const result = await lace.connected.balanceUnsealedTransaction(
           serialized,
@@ -114,12 +262,14 @@ export const buildCocoaProviders = (lace: LaceConnection): CocoaProviders => {
         );
         // The wallet's `balanceUnsealedTransaction` returns a sealed,
         // signed, bound transaction → Transaction<SignatureEnabled, Proof, Binding>.
-        return Transaction.deserialize(
+        const balanced = Transaction.deserialize(
           "signature",
           "proof",
           "binding",
           fromHex(result.tx),
         ) as FinalizedTransaction;
+        logImbalances("after wallet balance", balanced);
+        return balanced;
       },
     },
     midnightProvider: {
