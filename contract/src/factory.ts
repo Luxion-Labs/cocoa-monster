@@ -46,6 +46,7 @@ export const compiledMarketFactoryContract = pipe(
     "factory",
     FactoryContractClass as never,
   ),
+  CompiledContract.withWitnesses({} as never),
 );
 
 export const bytesToHex = (bytes: Uint8Array): string =>
