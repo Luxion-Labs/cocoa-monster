@@ -29,6 +29,23 @@ const deadlineLabel = (deadline?: number): string =>
 
 const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
+const statusLabel = (status?: OracleMarket["oracleStatus"]): string => {
+  switch (status) {
+    case "OPEN":
+      return "Betting open";
+    case "AWAITING_PROPOSAL":
+      return "Awaiting proposal";
+    case "PROPOSED":
+      return "Proposed";
+    case "DISPUTED":
+      return "Disputed";
+    case "FINALIZED":
+      return "Finalized";
+    default:
+      return "Not registered";
+  }
+};
+
 export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) => {
   const [market, setMarket] = useState<OracleMarket | null>(null);
   const [outcome, setOutcome] = useState<OracleOutcome>("YES");
@@ -137,8 +154,36 @@ export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) =>
     <div className="oracle-panel" data-testid="optimistic-oracle-panel">
       <h3>Optimistic oracle</h3>
       <p>
-        Status: <strong>{market?.oracleStatus ?? "Not registered"}</strong>
+        Status: <strong>{statusLabel(market?.oracleStatus)}</strong>
       </p>
+      {market?.closeTime && (
+        <p>
+          Betting deadline:{" "}
+          <strong>{formatUnixSeconds(BigInt(market.closeTime))}</strong>
+        </p>
+      )}
+      {market?.resolutionSource && (
+        <p>
+          Source: <strong>{market.resolutionSource}</strong>
+        </p>
+      )}
+      {market?.resolutionRules && (
+        <div className="oracle-panel__rules">
+          <strong>Resolution rules</strong>
+          <p>{market.resolutionRules}</p>
+        </div>
+      )}
+      {market?.proposerBond && (
+        <p>
+          Proposal bond: <strong>{market.proposerBond}</strong>
+          {market.disputerBond ? (
+            <>
+              {"; "}
+              Dispute bond: <strong>{market.disputerBond}</strong>
+            </>
+          ) : null}
+        </p>
+      )}
       {market?.proposedOutcome && (
         <p>
           Proposed <strong>{market.proposedOutcome}</strong>. Dispute window

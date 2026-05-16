@@ -34,6 +34,11 @@ export type OracleMarket = {
   readonly disputeReason?: string;
   readonly finalOutcome?: OracleOutcome;
   readonly finalizedAt?: number;
+  readonly resolutionRules?: string;
+  readonly resolutionSource?: string;
+  readonly disputeWindowSeconds?: number;
+  readonly proposerBond?: string;
+  readonly disputerBond?: string;
 };
 
 export type OracleResolution = {
@@ -81,12 +86,16 @@ const parseMarketPayload = (payload: { market?: unknown }): OracleMarket => {
 export const prepareOracle = async (input: {
   question: string;
   closeTime: bigint;
+  resolutionRules?: string;
+  resolutionSource?: string;
 }): Promise<PreparedOracle> => {
   const payload = await postJson<{ oracleId: string; oraclePubKey: string }>(
     "/oracle/prepare",
     {
       question: input.question,
       closeTime: input.closeTime.toString(),
+      resolutionRules: input.resolutionRules,
+      resolutionSource: input.resolutionSource,
     },
   );
   return {
@@ -100,12 +109,16 @@ export const registerOracleMarket = async (input: {
   contractAddress: string;
   question: string;
   closeTime: bigint;
+  resolutionRules?: string;
+  resolutionSource?: string;
 }): Promise<void> => {
   await postJson("/oracle/markets", {
     oracleId: input.oracleId,
     contractAddress: input.contractAddress,
     question: input.question,
     closeTime: input.closeTime.toString(),
+    resolutionRules: input.resolutionRules,
+    resolutionSource: input.resolutionSource,
   });
 };
 

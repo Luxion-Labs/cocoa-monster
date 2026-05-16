@@ -643,7 +643,8 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   max-width: 480px;
 }
 .create-market__field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
-.create-market__field input {
+.create-market__field input,
+.create-market__field textarea {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -651,6 +652,7 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   color: var(--text);
   font: inherit;
 }
+.create-market__field textarea { resize: vertical; min-height: 120px; }
 .create-market__error {
   color: var(--danger);
   background: rgba(238, 79, 90, 0.12);
@@ -682,6 +684,18 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
   color: var(--muted);
   font-size: 0.9rem;
 }
+
+.oracle-panel__rules {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.oracle-panel__rules strong { font-size: 0.85rem; }
 
 .oracle-panel__form {
   display: flex;

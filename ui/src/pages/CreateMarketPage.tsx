@@ -20,6 +20,8 @@ export const CreateMarketPage = () => {
 
   const [question, setQuestion] = useState("");
   const [liquidity, setLiquidity] = useState(DEFAULT_LIQUIDITY);
+  const [resolutionSource, setResolutionSource] = useState("");
+  const [resolutionRules, setResolutionRules] = useState("");
   const [closeAt, setCloseAt] = useState<string>(() => {
     // Default to one hour from now, in YYYY-MM-DDTHH:mm form.
     const t = new Date(Date.now() + 60 * 60 * 1000);
@@ -49,6 +51,7 @@ export const CreateMarketPage = () => {
   const valid =
     !!wallet.connection &&
     question.trim().length > 0 &&
+    resolutionRules.trim().length > 0 &&
     liquidityBig !== null &&
     closeTimestamp !== null;
 
@@ -79,6 +82,8 @@ export const CreateMarketPage = () => {
       const oracle = await prepareOracle({
         question: question.trim(),
         closeTime: closeTimestamp!,
+        resolutionRules: resolutionRules.trim(),
+        resolutionSource: resolutionSource.trim(),
       });
       const api = await deployCocoaMarket(providers, {
         question: question.trim(),
@@ -104,6 +109,8 @@ export const CreateMarketPage = () => {
         contractAddress: api.contractAddress,
         question: question.trim(),
         closeTime: closeTimestamp!,
+        resolutionRules: resolutionRules.trim(),
+        resolutionSource: resolutionSource.trim(),
       });
       rememberMarket({
         contractAddress: api.contractAddress,
@@ -158,7 +165,7 @@ export const CreateMarketPage = () => {
             />
           </label>
           <label className="create-market__field">
-            <span>Trading ends</span>
+            <span>Betting deadline</span>
             <input
               type="datetime-local"
               value={closeAt}
@@ -166,9 +173,30 @@ export const CreateMarketPage = () => {
               data-testid="create-market-close"
             />
           </label>
+          <label className="create-market__field">
+            <span>Resolution source</span>
+            <input
+              type="text"
+              value={resolutionSource}
+              onChange={(e) => setResolutionSource(e.target.value)}
+              placeholder="Official result, exchange listing page, API URL"
+              data-testid="create-market-resolution-source"
+            />
+          </label>
+          <label className="create-market__field">
+            <span>Resolution rules</span>
+            <textarea
+              required
+              rows={5}
+              value={resolutionRules}
+              onChange={(e) => setResolutionRules(e.target.value)}
+              placeholder="This market resolves YES if... Otherwise it resolves NO. If the event is ambiguous, use..."
+              data-testid="create-market-resolution-rules"
+            />
+          </label>
           <p className="create-market__note">
-            The oracle service prepares the market key and registers the
-            deployed contract for shared discovery.
+            Trading stops at the betting deadline. The optimistic oracle uses
+            the resolution rules and source to propose the final outcome.
           </p>
           <button
             type="submit"

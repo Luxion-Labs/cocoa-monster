@@ -10,6 +10,8 @@ const port = Number(process.env.ORACLE_PORT ?? "8787");
 const dataDir = process.env.ORACLE_DATA_DIR ?? new URL("../data", import.meta.url).pathname;
 const storePath = join(dataDir, "oracle-store.json");
 const disputeWindowSeconds = Number(process.env.ORACLE_DISPUTE_WINDOW_SECONDS ?? "300");
+const proposerBond = process.env.ORACLE_PROPOSER_BOND ?? "750";
+const disputerBond = process.env.ORACLE_DISPUTER_BOND ?? proposerBond;
 
 const bytesToHex = (bytes) =>
   Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -33,6 +35,9 @@ const parseOutcome = (value) => {
   if (value === "YES" || value === "NO") return value;
   throw new Error("outcome must be YES or NO");
 };
+
+const readString = (value, fallback = "") =>
+  typeof value === "string" ? value.trim() : fallback;
 
 const oracleStatus = (market) => {
   if (market.finalizedAt) return "FINALIZED";
@@ -111,6 +116,8 @@ const route = async (request, response) => {
       oraclePubKey: bytesToHex(oraclePubKey),
       question: body.question,
       closeTime: String(body.closeTime ?? ""),
+      resolutionRules: readString(body.resolutionRules),
+      resolutionSource: readString(body.resolutionSource),
       createdAt: new Date().toISOString(),
     };
     await saveStore(store);
@@ -133,8 +140,12 @@ const route = async (request, response) => {
       contractAddress: body.contractAddress,
       question: typeof body.question === "string" ? body.question : prepared.question,
       closeTime: String(body.closeTime ?? prepared.closeTime),
+      resolutionRules: readString(body.resolutionRules, prepared.resolutionRules),
+      resolutionSource: readString(body.resolutionSource, prepared.resolutionSource),
       registeredAt: new Date().toISOString(),
       disputeWindowSeconds,
+      proposerBond,
+      disputerBond,
     };
     await saveStore(store);
     return send(response, 200, { market: publicMarket(store.markets[body.contractAddress]) });
@@ -188,6 +199,7 @@ const route = async (request, response) => {
       proposalDeadline: proposedAt + (market.disputeWindowSeconds ?? disputeWindowSeconds),
       proposer: typeof body.proposer === "string" ? body.proposer : "oracle",
       evidenceUrl: typeof body.evidenceUrl === "string" ? body.evidenceUrl : "",
+      proposerBond: market.proposerBond ?? proposerBond,
       disputedAt: undefined,
       disputer: undefined,
       disputeReason: undefined,
@@ -220,6 +232,7 @@ const route = async (request, response) => {
       disputedAt: nowSeconds(),
       disputer: typeof body.disputer === "string" ? body.disputer : "anonymous",
       disputeReason: typeof body.reason === "string" ? body.reason : "",
+      disputerBond: market.disputerBond ?? disputerBond,
     });
     await saveStore(store);
     return send(response, 200, { market: publicMarket(market) });
