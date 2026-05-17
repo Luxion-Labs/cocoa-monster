@@ -207,21 +207,29 @@ export const MarketListPage = () => {
   return (
     <section className="page market-list">
       <header className="market-list__hero">
-        <div>
+        <div className="market-list__hero-copy">
           <p className="market-list__eyebrow">Prediction markets</p>
           <h1>Trade what the world is watching.</h1>
         </div>
-        <div className="market-list__hero-actions">
-          <button
-            className="btn btn--ghost market-list__reload"
-            onClick={handleReload}
-            disabled={isLoading}
-          >
-            {isLoading ? "Refreshing..." : "Refresh"}
-          </button>
-          <Link to="/create" className="btn btn--primary market-list__create">
-            New market
-          </Link>
+        <div className="market-list__hero-side">
+          <img
+            src="/cocoa-mascot.png"
+            alt=""
+            className="market-list__mascot"
+            aria-hidden="true"
+          />
+          <div className="market-list__hero-actions">
+            <button
+              className="btn btn--ghost market-list__reload"
+              onClick={handleReload}
+              disabled={isLoading}
+            >
+              {isLoading ? "Refreshing..." : "Refresh"}
+            </button>
+            <Link to="/create" className="btn btn--primary market-list__create">
+              New market
+            </Link>
+          </div>
         </div>
       </header>
 
