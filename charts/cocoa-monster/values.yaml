@@ -26,8 +26,8 @@ service:
   type: ClusterIP
   port: 80
 
-# SPA ingress. Override per-env (host: app.staging.cocoa.monster /
-# app.cocoa.monster). The proof-server is exposed via its own ingress
+# SPA ingress. Override per-env (host: staging.cocoa.monster /
+# cocoa.monster). The proof-server is exposed via its own ingress
 # at proof-server.<domain> — see `proofServer.ingress` below.
 ingress:
   enabled: false
@@ -41,8 +41,7 @@ ingress:
 # loaded by the browser at runtime.
 runtimeConfig:
   enabled: true
-  values:
-    VITE_MARKET_FACTORY_ADDRESS: 858870881ea82b9637342fcd87a7b921237fd6d7f29d85825edfa8544ffadcd9
+  values: {}
 
 # Extra envs forwarded to the nginx container. These are process envs
 # only; they are not visible to the already-built Vite bundle unless
