@@ -137,7 +137,7 @@ const resolveSeedBytes = () => {
 };
 
 const defaultRelayUrl = (networkId) => {
-  if (networkId === "preprod") return "wss://rpc.preprod.midnight.network";
+  if (networkId === "preprod") return "https://rpc.preprod.midnight.network";
   throw new Error("COCOA_RELAY_URL is required for non-preprod networks");
 };
 
@@ -216,69 +216,74 @@ const buildWalletFacade = async ({
         LedgerParameters.initialParameters().dust,
       ),
   });
-  log("wallet facade initialized");
+  try {
+    log("wallet facade initialized");
 
-  log("starting wallet facade");
-  await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey);
-  log("wallet facade started");
+    log("starting wallet facade");
+    await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey);
+    log("wallet facade started");
 
-  const syncTimeoutMs = parsePositiveInt(
-    env("COCOA_FACTORY_SYNC_TIMEOUT_MS", "300000"),
-    "COCOA_FACTORY_SYNC_TIMEOUT_MS",
-  );
-  log(`waiting for wallet sync, timeout ${Math.round(syncTimeoutMs / 1000)}s`);
-  const synced = await withTimeout(
-    facade.waitForSyncedState(),
-    "wallet sync",
-    syncTimeoutMs,
-  );
-  log(`wallet synced for account ${synced.shielded.address}`);
-  const zkConfigProvider = new FileZkConfigProvider(
-    path.join(repoRoot, "contract/src/managed/factory"),
-  );
+    const syncTimeoutMs = parsePositiveInt(
+      env("COCOA_FACTORY_SYNC_TIMEOUT_MS", "300000"),
+      "COCOA_FACTORY_SYNC_TIMEOUT_MS",
+    );
+    log(`waiting for wallet sync, timeout ${Math.round(syncTimeoutMs / 1000)}s`);
+    const synced = await withTimeout(
+      facade.waitForSyncedState(),
+      "wallet sync",
+      syncTimeoutMs,
+    );
+    log(`wallet synced for account ${synced.shielded.address}`);
+    const zkConfigProvider = new FileZkConfigProvider(
+      path.join(repoRoot, "contract/src/managed/factory"),
+    );
 
-  return {
-    facade,
-    accountId: synced.shielded.address,
-    providers: {
-      privateStateProvider: levelPrivateStateProvider({
-        midnightDbName: path.join(privateStateDir, "midnight"),
-        privateStateStoreName: "private-states",
-        signingKeyStoreName: "signing-keys",
-        accountId: synced.shielded.address,
-        privateStoragePasswordProvider: async () => privateStatePassword,
-      }),
-      publicDataProvider: indexerPublicDataProvider(indexerUri, indexerWsUri),
-      zkConfigProvider,
-      proofProvider: httpClientProofProvider(proofServerUri, zkConfigProvider),
-      walletProvider: {
-        getCoinPublicKey: () => synced.shielded.coinPublicKey,
-        getEncryptionPublicKey: () => synced.shielded.encryptionPublicKey,
-        balanceTx: async (tx, ttl) => {
-          const recipe = await facade.balanceUnboundTransaction(
-            tx,
-            {
-              shieldedSecretKeys: keys.shieldedSecretKeys,
-              dustSecretKey: keys.dustSecretKey,
-            },
-            {
-              ttl: ttl ?? new Date(Date.now() + 60 * 60 * 1000),
-              tokenKindsToBalance: "all",
-            },
-          );
-          return facade.finalizeRecipe(recipe);
+    return {
+      facade,
+      accountId: synced.shielded.address,
+      providers: {
+        privateStateProvider: levelPrivateStateProvider({
+          midnightDbName: path.join(privateStateDir, "midnight"),
+          privateStateStoreName: "private-states",
+          signingKeyStoreName: "signing-keys",
+          accountId: synced.shielded.address,
+          privateStoragePasswordProvider: async () => privateStatePassword,
+        }),
+        publicDataProvider: indexerPublicDataProvider(indexerUri, indexerWsUri),
+        zkConfigProvider,
+        proofProvider: httpClientProofProvider(proofServerUri, zkConfigProvider),
+        walletProvider: {
+          getCoinPublicKey: () => synced.shielded.coinPublicKey,
+          getEncryptionPublicKey: () => synced.shielded.encryptionPublicKey,
+          balanceTx: async (tx, ttl) => {
+            const recipe = await facade.balanceUnboundTransaction(
+              tx,
+              {
+                shieldedSecretKeys: keys.shieldedSecretKeys,
+                dustSecretKey: keys.dustSecretKey,
+              },
+              {
+                ttl: ttl ?? new Date(Date.now() + 60 * 60 * 1000),
+                tokenKindsToBalance: "all",
+              },
+            );
+            return facade.finalizeRecipe(recipe);
+          },
+        },
+        midnightProvider: {
+          submitTx: async (tx) => {
+            await facade.submitTransaction(tx);
+            const ids = tx.identifiers();
+            if (ids.length === 0) throw new Error("Transaction has no identifiers");
+            return ids[0];
+          },
         },
       },
-      midnightProvider: {
-        submitTx: async (tx) => {
-          await facade.submitTransaction(tx);
-          const ids = tx.identifiers();
-          if (ids.length === 0) throw new Error("Transaction has no identifiers");
-          return ids[0];
-        },
-      },
-    },
-  };
+    };
+  } catch (error) {
+    await facade.stop();
+    throw error;
+  }
 };
 
 const main = async () => {
