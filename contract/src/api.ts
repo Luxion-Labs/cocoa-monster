@@ -45,6 +45,18 @@ export type CocoaDeployed = DeployedContract<CocoaContract>;
 export type CocoaFound = FoundContract<CocoaContract>;
 
 export const COCOA_PRIVATE_STATE_ID = "cocoa" as const;
+export const MAX_MARKET_OPTIONS = 8;
+
+type PaddedMarketOptions = [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
 
 const ZERO_32 = new Uint8Array(32);
 
@@ -79,18 +91,23 @@ const redeemPayout = (
   position: CocoaPosition,
   ledger: ReturnType<typeof readLedger>,
 ): bigint => {
-  if (ledger.status !== Status.RESOLVED) {
-    throw new Error("market not resolved");
+  const optionId = position.optionId ?? 0n;
+  if (!ledger.options.member(optionId)) {
+    throw new Error("unknown option");
   }
-  if (ledger.outcome !== position.side) {
+  const option = ledger.options.lookup(optionId);
+  if (option.status !== Status.RESOLVED) {
+    throw new Error("option not resolved");
+  }
+  if (option.outcome !== position.side) {
     throw new Error("wrong side");
   }
   const winningStake =
-    ledger.outcome === Side.YES ? ledger.totalYesStake : ledger.totalNoStake;
+    option.outcome === Side.YES ? option.totalYesStake : option.totalNoStake;
   if (winningStake <= 0n) {
     throw new Error("no winning stake");
   }
-  const payout = (position.amount * ledger.volume) / winningStake;
+  const payout = (position.amount * option.volume) / winningStake;
   if (payout <= 0n) {
     throw new Error("payout is zero");
   }
@@ -98,6 +115,27 @@ const redeemPayout = (
 };
 
 const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
+
+const normalizeMarketOptions = (options: readonly string[] | undefined): string[] => {
+  const normalized = (options ?? ["Outcome"])
+    .map((option) => option.trim())
+    .filter((option) => option.length > 0);
+  if (normalized.length === 0) {
+    throw new Error("at least one option is required");
+  }
+  if (normalized.length > MAX_MARKET_OPTIONS) {
+    throw new Error(`at most ${MAX_MARKET_OPTIONS} options are supported`);
+  }
+  return normalized;
+};
+
+const padMarketOptions = (options: readonly string[]): PaddedMarketOptions => {
+  const padded = [
+    ...options,
+    ...Array.from({ length: MAX_MARKET_OPTIONS - options.length }, () => ""),
+  ];
+  return padded as PaddedMarketOptions;
+};
 
 /**
  * Contract binding using compact-js's CompiledContract effect builder.
@@ -115,6 +153,7 @@ export const compiledCocoaContract = pipe(
 
 export type DeployCocoaMarketOptions = {
   question: string;
+  options?: readonly string[];
   resolutionRules: string;
   resolutionSource?: string;
   initialLiquidity: bigint;
@@ -138,6 +177,8 @@ export const deployCocoaMarket = async (
   providers: CocoaProviders,
   opts: DeployCocoaMarketOptions,
 ): Promise<CocoaApi> => {
+  const marketOptions = normalizeMarketOptions(opts.options);
+  const paddedOptions = padMarketOptions(marketOptions);
   const oracleSecret = opts.oracleSecret ?? (opts.oraclePubKey ? ZERO_32 : randomBytes32());
   const oraclePubKey = opts.oraclePubKey ?? computeOraclePubKey(oracleSecret);
   if (opts.oraclePubKey && opts.oracleSecret) {
@@ -164,6 +205,8 @@ export const deployCocoaMarket = async (
       opts.resolutionSource ?? "",
       String(opts.initialLiquidity),
       String(opts.closeTime),
+      String(marketOptions.length),
+      marketOptions,
     ],
   });
   const deployed = await deployContract<CocoaContract>(providers, {
@@ -177,6 +220,8 @@ export const deployCocoaMarket = async (
       opts.initialLiquidity,
       opts.closeTime,
       oraclePubKey,
+      BigInt(marketOptions.length),
+      ...paddedOptions,
     ],
   });
   // eslint-disable-next-line no-console
@@ -235,17 +280,19 @@ export class CocoaApi {
     side: Side,
     stakeIn: bigint,
     amountOut: bigint,
+    optionId: bigint = 0n,
   ): Promise<CocoaPosition> {
     const nonce = randomBytes32();
     await this.rotateNonce(nonce);
     const result = await this.deployed.callTx.buy(
+      optionId,
       side,
       amountOut,
       stakeIn,
       nowSeconds(),
     );
     const amount = (result as { private: { result: bigint } }).private.result;
-    const position: CocoaPosition = { side, amount, nonce };
+    const position: CocoaPosition = { optionId, side, amount, nonce };
     await this.appendOwnedPosition(position);
     return position;
   }
@@ -259,7 +306,17 @@ export class CocoaApi {
     disputeWindowSeconds: bigint,
     nowTs: bigint = nowSeconds(),
   ): Promise<void> {
+    await this.proposeOptionOutcome(0n, side, disputeWindowSeconds, nowTs);
+  }
+
+  async proposeOptionOutcome(
+    optionId: bigint,
+    side: Side,
+    disputeWindowSeconds: bigint,
+    nowTs: bigint = nowSeconds(),
+  ): Promise<void> {
     await this.deployed.callTx.proposeOutcome(
+      optionId,
       side,
       nowTs,
       disputeWindowSeconds,
@@ -267,21 +324,34 @@ export class CocoaApi {
   }
 
   async disputeOutcome(nowTs: bigint = nowSeconds()): Promise<void> {
-    await this.deployed.callTx.disputeOutcome(nowTs);
+    await this.disputeOptionOutcome(0n, nowTs);
+  }
+
+  async disputeOptionOutcome(optionId: bigint, nowTs: bigint = nowSeconds()): Promise<void> {
+    await this.deployed.callTx.disputeOutcome(optionId, nowTs);
   }
 
   async finalizeOutcome(nowTs: bigint = nowSeconds()): Promise<void> {
-    await this.deployed.callTx.finalizeOutcome(nowTs);
+    await this.finalizeOptionOutcome(0n, nowTs);
+  }
+
+  async finalizeOptionOutcome(optionId: bigint, nowTs: bigint = nowSeconds()): Promise<void> {
+    await this.deployed.callTx.finalizeOutcome(optionId, nowTs);
   }
 
   async resolve(side: Side, nowTs: bigint): Promise<void> {
-    await this.deployed.callTx.resolve(side, nowTs);
+    await this.resolveOption(0n, side, nowTs);
+  }
+
+  async resolveOption(optionId: bigint, side: Side, nowTs: bigint): Promise<void> {
+    await this.deployed.callTx.resolve(optionId, side, nowTs);
   }
 
   async resolveWithOracleSecret(
     side: Side,
     nowTs: bigint,
     oracleSecret: Uint8Array,
+    optionId: bigint = 0n,
   ): Promise<void> {
     if (oracleSecret.length !== 32) {
       throw new Error("oracle secret must be 32 bytes");
@@ -297,7 +367,7 @@ export class CocoaApi {
         createCocoaPrivateState(randomBytes32(), randomBytes32(), oracleSecret)),
       oracleSecret,
     });
-    await this.resolve(side, nowTs);
+    await this.resolveOption(optionId, side, nowTs);
   }
 
   async redeem(position: CocoaPosition, recipient: UserAddress): Promise<bigint> {
@@ -310,6 +380,7 @@ export class CocoaApi {
     const payout = redeemPayout(position, readLedger(state.data));
     await this.rotateNonce(position.nonce);
     const result = await this.deployed.callTx.redeem(
+      position.optionId ?? 0n,
       position.side,
       position.amount,
       payout,

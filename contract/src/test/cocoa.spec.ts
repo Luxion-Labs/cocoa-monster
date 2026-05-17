@@ -21,25 +21,42 @@ describe("Cocoa contract — initial state", () => {
     expect(ledger.question).toBe("Will it rain tomorrow?");
     expect(ledger.resolutionRules).toBe("Resolve according to the source.");
     expect(ledger.resolutionSource).toBe("https://example.com");
-    expect(ledger.reserveYes).toBe(1000n);
-    expect(ledger.reserveNo).toBe(1000n);
+    expect(ledger.optionCount).toBe(1n);
+    expect(ledger.unresolvedOptionCount).toBe(1n);
+    expect(ledger.options.size()).toBe(1n);
+    const option = sim.option();
+    expect(option.label).toBe("Outcome");
+    expect(option.reserveYes).toBe(1000n);
+    expect(option.reserveNo).toBe(1000n);
     expect(ledger.closeTime).toBe(1_000n);
     expect(ledger.oraclePubKey).toEqual(sim.oraclePubKey);
     expect(ledger.status).toBe(Status.OPEN);
     expect(ledger.positions.isEmpty()).toBe(true);
     expect(ledger.nullifiers.isEmpty()).toBe(true);
   });
+
+  it("seeds multiple options under one question", () => {
+    const sim = initial({ options: ["Alice", "Bob", "Carol"] });
+    const ledger = sim.ledger();
+
+    expect(ledger.optionCount).toBe(3n);
+    expect(ledger.unresolvedOptionCount).toBe(3n);
+    expect(ledger.options.size()).toBe(3n);
+    expect(sim.option(0n).label).toBe("Alice");
+    expect(sim.option(1n).label).toBe("Bob");
+    expect(sim.option(2n).label).toBe("Carol");
+  });
 });
 
 describe("Cocoa contract — buy circuit", () => {
   it("burns YES reserve and grows NO reserve when buying YES", () => {
     const sim = initial();
-    const before = sim.ledger();
+    const before = sim.option();
 
     const quote = 90n;
     const stake = sim.buy(Side.YES, 100n, quote);
 
-    const after = sim.ledger();
+    const after = sim.option();
     expect(stake).toBe(100n);
     expect(after.reserveYes).toBe(before.reserveYes - quote);
     expect(after.reserveNo).toBe(before.reserveNo + 100n);
@@ -47,8 +64,8 @@ describe("Cocoa contract — buy circuit", () => {
     expect(after.volume).toBe(before.volume + 100n);
     expect(after.totalYesStake).toBe(before.totalYesStake + 100n);
     expect(after.totalNoStake).toBe(before.totalNoStake);
-    expect(after.positions.size()).toBe(1n);
-    expect(after.nullifiers.isEmpty()).toBe(true);
+    expect(sim.ledger().positions.size()).toBe(1n);
+    expect(sim.ledger().nullifiers.isEmpty()).toBe(true);
   });
 
   it("burns NO reserve and grows YES reserve when buying NO", () => {
@@ -56,13 +73,13 @@ describe("Cocoa contract — buy circuit", () => {
     const quote = 166n;
     const stake = sim.buy(Side.NO, 200n, quote);
 
-    const after = sim.ledger();
+    const after = sim.option();
     expect(stake).toBe(200n);
     expect(after.reserveYes).toBe(1000n + 200n);
     expect(after.reserveNo).toBe(1000n - quote);
     expect(after.totalNoStake).toBe(200n);
     expect(after.totalYesStake).toBe(0n);
-    expect(after.positions.size()).toBe(1n);
+    expect(sim.ledger().positions.size()).toBe(1n);
   });
 
   it("returns the paid stake amount", () => {
@@ -84,17 +101,17 @@ describe("Cocoa contract — buy circuit", () => {
     const sim = initial({ initialLiquidity: 10_000n });
 
     let priceYesPrev = 0.5;
-    // Vary amount each iteration so commitments differ — H(sk, nonce, side,
-    // amount) is deterministic, so identical buys would collide in the
+    // Vary amount each iteration so commitments differ — H(sk, nonce, option,
+    // side, amount) is deterministic, so identical buys would collide in the
     // positions set and accidentally hide a real position.
     for (let i = 0; i < 5; i++) {
-      const before = sim.ledger();
+      const before = sim.option();
       sim.buy(
         Side.YES,
         100n,
         quoteAmountOut(before.reserveYes, before.reserveNo, Side.YES, 100n),
       );
-      const l = sim.ledger();
+      const l = sim.option();
       const priceYes =
         Number(l.reserveNo) / Number(l.reserveYes + l.reserveNo);
       expect(priceYes).toBeGreaterThan(priceYesPrev);
@@ -106,11 +123,29 @@ describe("Cocoa contract — buy circuit", () => {
 
   it("records sequential buys when the resulting positions differ", () => {
     const sim = initial({ initialLiquidity: 10_000n });
-    let l = sim.ledger();
+    let l = sim.option();
     sim.buy(Side.YES, 100n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.YES, 100n));
-    l = sim.ledger();
+    l = sim.option();
     sim.buy(Side.NO, 101n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 101n));
     expect(sim.ledger().positions.size()).toBe(2n);
+  });
+
+  it("isolates reserves and collateral per option", () => {
+    const sim = initial({ options: ["Alice", "Bob"], initialLiquidity: 10_000n });
+    const aliceBefore = sim.option(0n);
+    const bobBefore = sim.option(1n);
+
+    const bobQuote = quoteAmountOut(bobBefore.reserveYes, bobBefore.reserveNo, Side.YES, 100n);
+    sim.buy(Side.YES, 100n, bobQuote, 999n, 1n);
+
+    const aliceAfter = sim.option(0n);
+    const bobAfter = sim.option(1n);
+    expect(aliceAfter.reserveYes).toBe(aliceBefore.reserveYes);
+    expect(aliceAfter.reserveNo).toBe(aliceBefore.reserveNo);
+    expect(aliceAfter.pool).toBe(0n);
+    expect(bobAfter.reserveYes).toBe(bobBefore.reserveYes - bobQuote);
+    expect(bobAfter.reserveNo).toBe(bobBefore.reserveNo + 100n);
+    expect(bobAfter.pool).toBe(100n);
   });
 });
 
@@ -144,7 +179,7 @@ describe("Cocoa contract — oracle resolution", () => {
 
     const l = sim.ledger();
     expect(l.status).toBe(Status.RESOLVED);
-    expect(l.outcome).toBe(Side.YES);
+    expect(sim.option().outcome).toBe(Side.YES);
   });
 
   it("rejects resolve from a non-oracle caller", () => {
@@ -174,11 +209,11 @@ describe("Cocoa contract — oracle resolution", () => {
     sim.close(1_000n);
     sim.proposeOutcome(Side.YES, 1_100n, 300n);
 
-    const l = sim.ledger();
-    expect(l.proposedOutcome).toBe(Side.YES);
-    expect(l.proposedAt).toBe(1_100n);
-    expect(l.proposalDeadline).toBe(1_400n);
-    expect(l.oracleDisputed).toBe(0n);
+    const option = sim.option();
+    expect(option.proposedOutcome).toBe(Side.YES);
+    expect(option.proposedAt).toBe(1_100n);
+    expect(option.proposalDeadline).toBe(1_400n);
+    expect(option.oracleDisputed).toBe(0n);
   });
 
   it("finalizes an undisputed optimistic oracle proposal", () => {
@@ -190,8 +225,8 @@ describe("Cocoa contract — oracle resolution", () => {
 
     const l = sim.ledger();
     expect(l.status).toBe(Status.RESOLVED);
-    expect(l.outcome).toBe(Side.NO);
-    expect(l.oracleFinalized).toBe(1n);
+    expect(sim.option().outcome).toBe(Side.NO);
+    expect(sim.option().oracleFinalized).toBe(1n);
   });
 
   it("blocks finalization after an optimistic oracle dispute", () => {
@@ -200,8 +235,26 @@ describe("Cocoa contract — oracle resolution", () => {
     sim.proposeOutcome(Side.YES, 1_100n, 300n);
     sim.disputeOutcome(1_200n);
 
-    expect(sim.ledger().oracleDisputed).toBe(1n);
-    expect(() => sim.finalizeOutcome(1_400n)).toThrow(/market is disputed/);
+    expect(sim.option().oracleDisputed).toBe(1n);
+    expect(() => sim.finalizeOutcome(1_400n)).toThrow(/option is disputed/);
+  });
+
+  it("resolves each option independently before the parent market resolves", () => {
+    const sim = initial({ closeTime: 1_000n, options: ["Alice", "Bob"] });
+    sim.close(1_000n);
+
+    sim.resolve(Side.YES, 1_000n, 0n);
+    expect(sim.option(0n).status).toBe(Status.RESOLVED);
+    expect(sim.option(0n).outcome).toBe(Side.YES);
+    expect(sim.option(1n).status).toBe(Status.CLOSED);
+    expect(sim.ledger().status).toBe(Status.CLOSED);
+    expect(sim.ledger().unresolvedOptionCount).toBe(1n);
+
+    sim.resolve(Side.NO, 1_000n, 1n);
+    expect(sim.option(1n).status).toBe(Status.RESOLVED);
+    expect(sim.option(1n).outcome).toBe(Side.NO);
+    expect(sim.ledger().status).toBe(Status.RESOLVED);
+    expect(sim.ledger().unresolvedOptionCount).toBe(0n);
   });
 });
 
@@ -209,7 +262,7 @@ describe("Cocoa contract — redeem circuit", () => {
   it("rejects redeem before resolution", () => {
     const sim = initial();
     const amountOut = sim.buy(Side.YES, 100n, 90n);
-    expect(() => sim.redeem(Side.YES, amountOut)).toThrow(/market not resolved/);
+    expect(() => sim.redeem(Side.YES, amountOut)).toThrow(/option not resolved/);
   });
 
   it("rejects redeem on the losing side", () => {
@@ -234,42 +287,52 @@ describe("Cocoa contract — redeem circuit", () => {
   it("redeems a winning position for its pro-rata share of the pool", () => {
     const sim = initial({ closeTime: 1_000n });
     const amountOut = sim.buy(Side.YES, 100n, 90n);
-    let l = sim.ledger();
+    let l = sim.option();
     sim.buy(Side.NO, 700n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 700n));
     sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
 
     const payout = sim.redeem(Side.YES, amountOut);
     expect(payout).toBe(800n);
-    expect(sim.ledger().pool).toBe(0n);
+    expect(sim.option().pool).toBe(0n);
     expect(sim.ledger().nullifiers.size()).toBe(1n);
   });
 
   it("splits the pool pro-rata across multiple winners", () => {
     const sim = initial({ closeTime: 1_000n });
     const firstYes = sim.buy(Side.YES, 100n, 90n);
-    let l = sim.ledger();
+    let l = sim.option();
     const secondYes = sim.buy(Side.YES, 300n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.YES, 300n));
-    l = sim.ledger();
+    l = sim.option();
     sim.buy(Side.NO, 600n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 600n));
     sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
 
     expect(sim.redeem(Side.YES, firstYes)).toBe(250n);
     expect(sim.redeem(Side.YES, secondYes)).toBe(750n);
-    expect(sim.ledger().pool).toBe(0n);
+    expect(sim.option().pool).toBe(0n);
   });
 
   it("rejects caller-supplied payouts that are not the exact floor share", () => {
     const sim = initial({ closeTime: 1_000n });
     const amountOut = sim.buy(Side.YES, 100n, 90n);
-    let l = sim.ledger();
+    let l = sim.option();
     sim.buy(Side.NO, 700n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 700n));
     sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
 
     expect(() => sim.redeem(Side.YES, amountOut, 799n)).toThrow(/payout too low/);
     expect(() => sim.redeem(Side.YES, amountOut, 801n)).toThrow(/payout too high/);
+  });
+
+  it("does not allow a position from one option to redeem on another option", () => {
+    const sim = initial({ closeTime: 1_000n, options: ["Alice", "Bob"] });
+    const amountOut = sim.buy(Side.YES, 100n, 90n, 999n, 0n);
+    sim.close(1_000n);
+    sim.resolve(Side.YES, 1_000n, 0n);
+    sim.resolve(Side.YES, 1_000n, 1n);
+
+    expect(() => sim.redeem(Side.YES, amountOut, undefined, 1n)).toThrow(/no such position/);
   });
 
   it("blocks double-redeem via the nullifier set", () => {

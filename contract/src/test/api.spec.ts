@@ -8,6 +8,7 @@ const nonce = (seed: number): Uint8Array =>
   Uint8Array.from({ length: 32 }, (_, i) => seed + i);
 
 const position = (seed: number): CocoaPosition => ({
+  optionId: 0n,
   side: Side.YES,
   amount: 10n,
   nonce: nonce(seed),

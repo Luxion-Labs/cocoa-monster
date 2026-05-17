@@ -1,12 +1,18 @@
-import { type CocoaApi, type CocoaState, Side, quoteAmountOut } from "cocoa-contract";
+import {
+  type CocoaApi,
+  type CocoaOptionState,
+  Side,
+  quoteAmountOut,
+} from "cocoa-contract";
 import { useMemo, useState } from "react";
 
-import { formatBigInt, formatPriceYes } from "../lib/format";
+import { formatBigInt, formatPriceYes, formatSide } from "../lib/format";
 import type { LaceConnection } from "../lib/wallet";
 
 type Props = {
   api: CocoaApi;
-  state: CocoaState;
+  option: CocoaOptionState;
+  disabledReason?: string;
   wallet?: LaceConnection;
 };
 
@@ -23,35 +29,42 @@ const parseStake = (raw: string): bigint | null => {
   }
 };
 
-export const BetForm = ({ api, state, wallet }: Props) => {
+export const BetForm = ({ api, option, disabledReason, wallet }: Props) => {
   const [side, setSide] = useState<Side>(Side.YES);
   const [stakeRaw, setStakeRaw] = useState("100");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const tradingDisabled = disabledReason !== undefined;
 
   const stake = parseStake(stakeRaw);
 
   const quote = useMemo(() => {
     if (stake === null) return null;
-    return quoteAmountOut(state.reserveYes, state.reserveNo, side, stake);
-  }, [state.reserveYes, state.reserveNo, side, stake]);
+    return quoteAmountOut(option.reserveYes, option.reserveNo, side, stake);
+  }, [option.reserveYes, option.reserveNo, side, stake]);
 
   const impliedPriceAfter = useMemo(() => {
     if (stake === null || quote === null) return null;
     const newYes =
-      side === Side.YES ? state.reserveYes - quote : state.reserveYes + stake;
+      side === Side.YES ? option.reserveYes - quote : option.reserveYes + stake;
     const newNo =
-      side === Side.YES ? state.reserveNo + stake : state.reserveNo - quote;
+      side === Side.YES ? option.reserveNo + stake : option.reserveNo - quote;
     const total = Number(newYes + newNo);
     if (total === 0) return null;
     return Number(newNo) / total;
-  }, [stake, quote, side, state.reserveYes, state.reserveNo]);
+  }, [stake, quote, side, option.reserveYes, option.reserveNo]);
 
-  const disabled = submitting || stake === null || quote === null || quote <= 0n;
+  const disabled =
+    tradingDisabled ||
+    submitting ||
+    stake === null ||
+    quote === null ||
+    quote <= 0n;
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (tradingDisabled) return;
     if (stake === null || quote === null || quote <= 0n) return;
     setSubmitting(true);
     setError(null);
@@ -66,11 +79,9 @@ export const BetForm = ({ api, state, wallet }: Props) => {
           );
         }
       }
-      const position = await api.buy(side, stake, quote);
+      const position = await api.buy(side, stake, quote, option.optionId);
       setSuccess(
-        `Bet submitted: ${formatBigInt(position.amount)} NIGHT staked on ${
-          position.side === Side.YES ? "YES" : "NO"
-        }.`,
+        `Bet submitted: ${formatBigInt(position.amount)} NIGHT on ${formatSide(position.side)} for ${option.label}.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -80,7 +91,17 @@ export const BetForm = ({ api, state, wallet }: Props) => {
   };
 
   return (
-    <form onSubmit={submit} className="bet-form" data-testid="bet-form">
+    <form
+      onSubmit={submit}
+      className={`bet-form ${tradingDisabled ? "bet-form--disabled" : ""}`}
+      data-testid="bet-form"
+    >
+      <h3 className="bet-form__title">Trade {option.label}</h3>
+      {disabledReason && (
+        <p className="bet-form__notice" data-testid="bet-form-disabled-reason">
+          {disabledReason}
+        </p>
+      )}
       <div className="bet-form__sides">
         <label className={`bet-form__side bet-form__side--yes ${side === Side.YES ? "bet-form__side--active" : ""}`}>
           <input
@@ -88,10 +109,12 @@ export const BetForm = ({ api, state, wallet }: Props) => {
             name="side"
             value="YES"
             checked={side === Side.YES}
+            disabled={tradingDisabled || submitting}
             onChange={() => setSide(Side.YES)}
             data-testid="bet-form-side-yes"
           />
-          YES {formatPriceYes(state.priceYes)}
+          <strong>YES</strong>
+          <span>{formatPriceYes(option.priceYes)}</span>
         </label>
         <label className={`bet-form__side bet-form__side--no ${side === Side.NO ? "bet-form__side--active" : ""}`}>
           <input
@@ -99,10 +122,12 @@ export const BetForm = ({ api, state, wallet }: Props) => {
             name="side"
             value="NO"
             checked={side === Side.NO}
+            disabled={tradingDisabled || submitting}
             onChange={() => setSide(Side.NO)}
             data-testid="bet-form-side-no"
           />
-          NO {formatPriceYes(1 - state.priceYes)}
+          <strong>NO</strong>
+          <span>{formatPriceYes(1 - option.priceYes)}</span>
         </label>
       </div>
       <label className="bet-form__field">
@@ -111,6 +136,7 @@ export const BetForm = ({ api, state, wallet }: Props) => {
           type="text"
           inputMode="numeric"
           value={stakeRaw}
+          disabled={tradingDisabled || submitting}
           onChange={(e) => setStakeRaw(e.target.value)}
           data-testid="bet-form-collateral"
         />
@@ -118,9 +144,9 @@ export const BetForm = ({ api, state, wallet }: Props) => {
       <div className="bet-form__quote" data-testid="bet-form-quote">
         {quote !== null && quote > 0n ? (
           <>
-            <span>Market exposure</span>
+            <span>{formatSide(side)} exposure</span>
             <strong>
-              {formatBigInt(quote)} {side === Side.YES ? "YES" : "NO"} units
+              {formatBigInt(quote)} {formatSide(side)} units
             </strong>
             <span>{formatBigInt(stake ?? 0n)} NIGHT escrowed</span>
             {impliedPriceAfter !== null && (
@@ -141,7 +167,11 @@ export const BetForm = ({ api, state, wallet }: Props) => {
         }`}
         data-testid="bet-form-submit"
       >
-        {submitting ? "Submitting…" : `Bet ${side === Side.YES ? "YES" : "NO"}`}
+        {disabledReason
+          ? "Betting closed"
+          : submitting
+            ? "Submitting…"
+            : `Buy ${formatSide(side)}`}
       </button>
       {error && (
         <p className="bet-form__error" role="alert" data-testid="bet-form-error">

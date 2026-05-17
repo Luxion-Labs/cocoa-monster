@@ -4,6 +4,7 @@ import {
   forgetMarket,
   getMarketFactoryAddress,
   listKnownMarkets,
+  MARKET_CATEGORIES,
   rememberMarket,
   setMarketFactoryAddress,
 } from "./markets";
@@ -26,11 +27,43 @@ describe("markets address book", () => {
     rememberMarket({
       contractAddress: "0xabc",
       question: "Will it rain?",
+      category: "Culture",
       addedAt: 1,
     });
     expect(listKnownMarkets()).toEqual([
-      { contractAddress: "0xabc", question: "Will it rain?", addedAt: 1 },
+      {
+        contractAddress: "0xabc",
+        question: "Will it rain?",
+        category: "Culture",
+        addedAt: 1,
+      },
     ]);
+  });
+
+  it("drops unknown categories from stored markets", () => {
+    window.localStorage.setItem(
+      "cocoa.knownMarkets",
+      JSON.stringify([
+        {
+          contractAddress: "0xa",
+          question: "valid",
+          category: "NotReal",
+          addedAt: 1,
+        },
+      ]),
+    );
+    expect(listKnownMarkets()).toEqual([
+      {
+        contractAddress: "0xa",
+        question: "valid",
+        addedAt: 1,
+      },
+    ]);
+  });
+
+  it("exposes categories used by the create and home pages", () => {
+    expect(MARKET_CATEGORIES).toContain("Crypto");
+    expect(MARKET_CATEGORIES).toContain("Markets");
   });
 
   it("dedupes by contractAddress, keeping the most-recent entry first", () => {

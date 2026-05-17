@@ -1,8 +1,29 @@
 import {
   type Ledger,
+  type OptionState,
   Side,
   Status,
 } from "./managed/cocoa/contract/index.js";
+
+export type CocoaOptionState = {
+  optionId: bigint;
+  label: string;
+  reserveYes: bigint;
+  reserveNo: bigint;
+  pool: bigint;
+  volume: bigint;
+  totalYesStake: bigint;
+  totalNoStake: bigint;
+  status: Status;
+  outcome: Side | null;
+  proposedOutcome: Side | null;
+  proposedAt: bigint;
+  proposalDeadline: bigint;
+  oracleDisputed: boolean;
+  oracleFinalized: boolean;
+  /** YES probability implied by the CPMM: reserveNo / (reserveYes + reserveNo). */
+  priceYes: number;
+};
 
 /** UI-friendly snapshot of the public ledger. */
 export type CocoaState = {
@@ -11,6 +32,9 @@ export type CocoaState = {
   resolutionSource: string;
   closeTime: bigint;
   oraclePubKey: Uint8Array;
+  optionCount: bigint;
+  unresolvedOptionCount: bigint;
+  options: CocoaOptionState[];
   reserveYes: bigint;
   reserveNo: bigint;
   pool: bigint;
@@ -30,31 +54,79 @@ export type CocoaState = {
   priceYes: number;
 };
 
+const decodeOptionState = (
+  optionId: bigint,
+  option: OptionState,
+): CocoaOptionState => {
+  const total = Number(option.reserveYes + option.reserveNo);
+  return {
+    optionId,
+    label: option.label,
+    reserveYes: option.reserveYes,
+    reserveNo: option.reserveNo,
+    pool: option.pool,
+    volume: option.volume,
+    totalYesStake: option.totalYesStake,
+    totalNoStake: option.totalNoStake,
+    status: option.status,
+    outcome: option.status === Status.RESOLVED ? option.outcome : null,
+    proposedOutcome: option.proposedAt > 0n ? option.proposedOutcome : null,
+    proposedAt: option.proposedAt,
+    proposalDeadline: option.proposalDeadline,
+    oracleDisputed: option.oracleDisputed !== 0n,
+    oracleFinalized: option.oracleFinalized !== 0n,
+    priceYes: total === 0 ? 0.5 : Number(option.reserveNo) / total,
+  };
+};
+
 /** Project the on-chain ledger into a UI-friendly snapshot. */
 export const decodeCocoaState = (l: Ledger): CocoaState => {
-  const total = Number(l.reserveYes + l.reserveNo);
+  const options = [...l.options]
+    .map(([optionId, option]) => decodeOptionState(optionId, option))
+    .sort((a, b) => Number(a.optionId - b.optionId));
+  const primary =
+    options[0] ??
+    decodeOptionState(0n, {
+      label: "Outcome",
+      reserveYes: 0n,
+      reserveNo: 0n,
+      pool: 0n,
+      volume: 0n,
+      totalYesStake: 0n,
+      totalNoStake: 0n,
+      status: l.status,
+      outcome: Side.NO,
+      proposedOutcome: Side.NO,
+      proposedAt: 0n,
+      proposalDeadline: 0n,
+      oracleDisputed: 0n,
+      oracleFinalized: 0n,
+    });
   return {
     question: l.question,
     resolutionRules: l.resolutionRules,
     resolutionSource: l.resolutionSource,
     closeTime: l.closeTime,
     oraclePubKey: l.oraclePubKey,
-    reserveYes: l.reserveYes,
-    reserveNo: l.reserveNo,
-    pool: l.pool,
-    volume: l.volume,
-    totalYesStake: l.totalYesStake,
-    totalNoStake: l.totalNoStake,
+    optionCount: l.optionCount,
+    unresolvedOptionCount: l.unresolvedOptionCount,
+    options,
+    reserveYes: primary.reserveYes,
+    reserveNo: primary.reserveNo,
+    pool: primary.pool,
+    volume: primary.volume,
+    totalYesStake: primary.totalYesStake,
+    totalNoStake: primary.totalNoStake,
     status: l.status,
-    outcome: l.status === Status.RESOLVED ? l.outcome : null,
-    proposedOutcome: l.proposedAt > 0n ? l.proposedOutcome : null,
-    proposedAt: l.proposedAt,
-    proposalDeadline: l.proposalDeadline,
-    oracleDisputed: l.oracleDisputed !== 0n,
-    oracleFinalized: l.oracleFinalized !== 0n,
+    outcome: primary.outcome,
+    proposedOutcome: primary.proposedOutcome,
+    proposedAt: primary.proposedAt,
+    proposalDeadline: primary.proposalDeadline,
+    oracleDisputed: primary.oracleDisputed,
+    oracleFinalized: primary.oracleFinalized,
     positionCount: l.positions.size(),
     nullifierCount: l.nullifiers.size(),
-    priceYes: total === 0 ? 0.5 : Number(l.reserveNo) / total,
+    priceYes: primary.priceYes,
   };
 };
 

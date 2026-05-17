@@ -30,12 +30,23 @@ vi.mock("cocoa-contract", () => ({
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { Side, Status, type CocoaApi, type CocoaState } from "cocoa-contract";
+import {
+  Side,
+  Status,
+  type CocoaApi,
+  type CocoaOptionState,
+  type CocoaState,
+} from "cocoa-contract";
 import { BetForm } from "./BetForm";
 
 const fakeApi = (impl: Partial<CocoaApi> = {}) =>
   ({
-    buy: vi.fn(),
+    buy: vi.fn(async (side: Side, _stake: bigint, _amountOut: bigint, optionId = 0n) => ({
+      optionId,
+      side,
+      amount: 10n,
+      nonce: new Uint8Array(32),
+    })),
     close: vi.fn(),
     resolve: vi.fn(),
     redeem: vi.fn(),
@@ -49,6 +60,9 @@ const baseState: CocoaState = {
   resolutionSource: "https://example.com/result",
   closeTime: 999_999n,
   oraclePubKey: new Uint8Array(32),
+  optionCount: 1n,
+  unresolvedOptionCount: 1n,
+  options: [],
   reserveYes: 1000n,
   reserveNo: 1000n,
   pool: 0n,
@@ -67,19 +81,40 @@ const baseState: CocoaState = {
   priceYes: 0.5,
 };
 
+const baseOption: CocoaOptionState = {
+  optionId: 0n,
+  label: "Outcome",
+  reserveYes: 1000n,
+  reserveNo: 1000n,
+  pool: 0n,
+  volume: 0n,
+  totalYesStake: 0n,
+  totalNoStake: 0n,
+  status: Status.OPEN,
+  outcome: null,
+  proposedOutcome: null,
+  proposedAt: 0n,
+  proposalDeadline: 0n,
+  oracleDisputed: false,
+  oracleFinalized: false,
+  priceYes: 0.5,
+};
+
+baseState.options = [baseOption];
+
 describe("BetForm", () => {
   it("computes a non-zero quote for valid stake", () => {
-    render(<BetForm api={fakeApi()} state={baseState} />);
+    render(<BetForm api={fakeApi()} option={baseOption} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "200" },
     });
     expect(screen.getByTestId("bet-form-quote").textContent).toMatch(
-      /Market exposure\s*\d+\s*YES units/,
+      /YES exposure\s*\d+\s*YES units/,
     );
   });
 
   it("disables the submit button when stake is invalid", () => {
-    render(<BetForm api={fakeApi()} state={baseState} />);
+    render(<BetForm api={fakeApi()} option={baseOption} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "abc" },
     });
@@ -88,8 +123,32 @@ describe("BetForm", () => {
     ).toBe(true);
   });
 
+  it("shows a closed betting state and does not submit", () => {
+    const api = fakeApi();
+    render(
+      <BetForm
+        api={api}
+        option={baseOption}
+        disabledReason="Betting closed at 5/17/2026, 12:00:00 PM."
+      />,
+    );
+
+    expect(screen.getByTestId("bet-form-disabled-reason").textContent).toMatch(
+      /Betting closed/,
+    );
+    expect(screen.getByTestId("bet-form-submit").textContent).toBe(
+      "Betting closed",
+    );
+    expect(
+      (screen.getByTestId("bet-form-submit") as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    fireEvent.submit(screen.getByTestId("bet-form"));
+    expect(api.buy).not.toHaveBeenCalled();
+  });
+
   it("toggles between YES and NO and updates the quote shape", () => {
-    render(<BetForm api={fakeApi()} state={baseState} />);
+    render(<BetForm api={fakeApi()} option={baseOption} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "100" },
     });
@@ -105,19 +164,20 @@ describe("BetForm", () => {
 
   it("calls api.buy with the computed amountOut on submit", async () => {
     const api = fakeApi();
-    render(<BetForm api={api} state={baseState} />);
+    render(<BetForm api={api} option={baseOption} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "100" },
     });
     fireEvent.submit(screen.getByTestId("bet-form"));
 
     expect(api.buy).toHaveBeenCalledTimes(1);
-    const [side, stake, amountOut] = (
+    const [side, stake, amountOut, optionId] = (
       api.buy as ReturnType<typeof vi.fn>
     ).mock.calls[0];
     expect(side).toBe(Side.YES);
     expect(stake).toBe(100n);
     expect(amountOut).toBeGreaterThan(0n);
+    expect(optionId).toBe(0n);
   });
 
   it("renders the buy error to the user", async () => {
@@ -126,7 +186,7 @@ describe("BetForm", () => {
         throw new Error("nope");
       }),
     });
-    render(<BetForm api={api} state={baseState} />);
+    render(<BetForm api={api} option={baseOption} />);
     fireEvent.change(screen.getByTestId("bet-form-collateral"), {
       target: { value: "100" },
     });
@@ -145,7 +205,7 @@ describe("BetForm", () => {
     render(
       <BetForm
         api={api}
-        state={baseState}
+        option={baseOption}
         wallet={wallet as never}
       />,
     );

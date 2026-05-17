@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 export type CocoaPriceTick = {
   readonly t: number;
   readonly priceYes: number;
+  readonly optionPrices?: Record<string, number>;
 };
 
 const PRICE_HISTORY_LIMIT = 200;
@@ -54,13 +55,16 @@ export const useCocoaState = (
       next: (next) => {
         setState(next);
         setPriceHistory((prev) => {
-          const tick: CocoaPriceTick = { t: Date.now(), priceYes: next.priceYes };
+          const optionPrices = Object.fromEntries(
+            next.options.map((option) => [option.optionId.toString(), option.priceYes]),
+          );
+          const tick: CocoaPriceTick = { t: Date.now(), priceYes: next.priceYes, optionPrices };
           let merged = prev;
           const last = prev[prev.length - 1];
 
           if (!last) {
             merged = [tick];
-          } else if (last.priceYes !== tick.priceYes) {
+          } else if (JSON.stringify(last.optionPrices) !== JSON.stringify(tick.optionPrices)) {
             // Price updated on chain! Record it as a new data point
             merged = [...prev, tick];
           } else {

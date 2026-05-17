@@ -26,7 +26,7 @@ describe("quoteAmountOut", () => {
       closeTime: 1000n,
     });
     sim.buy(Side.YES, stake, amountOut);
-    const after = sim.ledger();
+    const after = sim.option();
     expect(after.reserveYes).toBe(reserveYes - amountOut);
     expect(after.reserveNo).toBe(reserveNo + stake);
   });
@@ -40,7 +40,7 @@ describe("quoteAmountOut", () => {
     const stake = 250n;
     const amountOut = quoteAmountOut(1000n, 1000n, Side.NO, stake);
     sim.buy(Side.NO, stake, amountOut);
-    const l = sim.ledger();
+    const l = sim.option();
     expect(l.reserveYes).toBe(1000n + stake);
     expect(l.reserveNo).toBe(1000n - amountOut);
   });

@@ -1,22 +1,32 @@
 import {
   deployCocoaMarket,
   joinMarketFactory,
+  MAX_MARKET_OPTIONS,
 } from "cocoa-contract";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useWallet } from "../hooks/useWallet";
 import { buildCocoaProviders } from "../lib/providers";
-import { getMarketFactoryAddress, rememberMarket } from "../lib/markets";
+import {
+  getMarketFactoryAddress,
+  MARKET_CATEGORIES,
+  type MarketCategory,
+  rememberMarket,
+} from "../lib/markets";
 import { explainError } from "../lib/errors";
 
 const DEFAULT_LIQUIDITY = "1000";
+type MarketType = "basic" | "multi";
 
 export const CreateMarketPage = () => {
   const wallet = useWallet();
   const navigate = useNavigate();
 
+  const [marketType, setMarketType] = useState<MarketType>("basic");
+  const [category, setCategory] = useState<MarketCategory>("Markets");
   const [question, setQuestion] = useState("");
+  const [optionsRaw, setOptionsRaw] = useState("Candidate A\nCandidate B");
   const [liquidity, setLiquidity] = useState(DEFAULT_LIQUIDITY);
   const [resolutionSource, setResolutionSource] = useState("");
   const [resolutionRules, setResolutionRules] = useState("");
@@ -46,9 +56,20 @@ export const CreateMarketPage = () => {
     }
   }, [liquidity]);
 
+  const marketOptions = useMemo(
+    () =>
+      optionsRaw
+        .split(/\r?\n/)
+        .map((option) => option.trim())
+        .filter((option) => option.length > 0),
+    [optionsRaw],
+  );
+
   const valid =
     !!wallet.connection &&
     question.trim().length > 0 &&
+    (marketType === "basic" ||
+      (marketOptions.length >= 2 && marketOptions.length <= MAX_MARKET_OPTIONS)) &&
     resolutionRules.trim().length > 0 &&
     liquidityBig !== null &&
     closeTimestamp !== null;
@@ -74,11 +95,14 @@ export const CreateMarketPage = () => {
       });
       console.debug("[cocoa] calling deployCocoaMarket", {
         question: question.trim(),
+        marketType,
+        category,
         initialLiquidity: String(liquidityBig),
         closeTime: String(closeTimestamp),
       });
       const api = await deployCocoaMarket(providers, {
         question: question.trim(),
+        options: marketType === "basic" ? undefined : marketOptions,
         resolutionRules: resolutionRules.trim(),
         resolutionSource: resolutionSource.trim(),
         initialLiquidity: liquidityBig!,
@@ -101,6 +125,7 @@ export const CreateMarketPage = () => {
       rememberMarket({
         contractAddress: api.contractAddress,
         question: question.trim(),
+        category,
         addedAt: Date.now(),
       });
       navigate(`/m/${api.contractAddress}`);
@@ -128,20 +153,74 @@ export const CreateMarketPage = () => {
         </div>
       ) : (
         <form onSubmit={submit} className="create-market__form" data-testid="create-market-form">
+          <div className="create-market__field">
+            <span>Market type</span>
+            <div className="create-market__type" role="group" aria-label="Market type">
+              <button
+                type="button"
+                className={`create-market__type-option ${
+                  marketType === "basic" ? "create-market__type-option--active" : ""
+                }`}
+                aria-pressed={marketType === "basic"}
+                onClick={() => setMarketType("basic")}
+                data-testid="create-market-type-basic"
+              >
+                Basic YES/NO
+              </button>
+              <button
+                type="button"
+                className={`create-market__type-option ${
+                  marketType === "multi" ? "create-market__type-option--active" : ""
+                }`}
+                aria-pressed={marketType === "multi"}
+                onClick={() => setMarketType("multi")}
+                data-testid="create-market-type-multi"
+              >
+                Multi-option
+              </button>
+            </div>
+          </div>
           <label className="create-market__field">
-            <span>Question</span>
+            <span>Category</span>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as MarketCategory)}
+              data-testid="create-market-category"
+            >
+              {MARKET_CATEGORIES.map((marketCategory) => (
+                <option key={marketCategory} value={marketCategory}>
+                  {marketCategory}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="create-market__field">
+            <span>Market question</span>
             <input
               type="text"
               required
               maxLength={200}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Will it rain in Lagos tomorrow?"
+              placeholder="Who will win the 2028 election?"
               data-testid="create-market-question"
             />
           </label>
+          {marketType === "multi" && (
+            <label className="create-market__field">
+              <span>Option markets</span>
+              <textarea
+                required
+                rows={Math.min(5, MAX_MARKET_OPTIONS)}
+                value={optionsRaw}
+                onChange={(e) => setOptionsRaw(e.target.value)}
+                placeholder={"Candidate A\nCandidate B\nCandidate C"}
+                data-testid="create-market-options"
+              />
+            </label>
+          )}
           <label className="create-market__field">
-            <span>Initial liquidity (each side)</span>
+            <span>Initial liquidity per YES/NO side</span>
             <input
               type="text"
               inputMode="numeric"
@@ -176,13 +255,18 @@ export const CreateMarketPage = () => {
               rows={5}
               value={resolutionRules}
               onChange={(e) => setResolutionRules(e.target.value)}
-              placeholder="This market resolves YES if... Otherwise it resolves NO. If the event is ambiguous, use..."
+              placeholder={
+                marketType === "basic"
+                  ? "Resolve YES if the event happens. Resolve NO otherwise."
+                  : "Resolve each option YES if that option wins. Resolve every other listed option NO."
+              }
               data-testid="create-market-resolution-rules"
             />
           </label>
           <p className="create-market__note">
-            Trading stops at the betting deadline. The optimistic oracle uses
-            the resolution rules and source to propose the final outcome.
+            {marketType === "basic"
+              ? "Trading stops at the betting deadline. The oracle resolves the market YES or NO."
+              : "Trading stops at the betting deadline. The oracle resolves every option as its own YES/NO result."}
           </p>
           <button
             type="submit"
@@ -190,7 +274,11 @@ export const CreateMarketPage = () => {
             className="btn btn--primary"
             data-testid="create-market-submit"
           >
-            {submitting ? "Deploying…" : "Deploy market"}
+            {submitting
+              ? "Deploying…"
+              : marketType === "basic"
+                ? "Deploy YES/NO market"
+                : "Deploy option markets"}
           </button>
           {error && (
             <p className="create-market__error" role="alert" data-testid="create-market-error">

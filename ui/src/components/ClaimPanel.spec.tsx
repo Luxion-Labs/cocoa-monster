@@ -32,9 +32,30 @@ const position = (
   amount = 10n,
   nonce = 1,
 ): CocoaPosition => ({
+  optionId: 0n,
   side,
   amount,
   nonce: Uint8Array.from({ length: 32 }, (_, i) => nonce + i),
+});
+
+const option = (overrides: Partial<CocoaState["options"][number]> = {}) => ({
+  optionId: 0n,
+  label: "Outcome",
+  reserveYes: 1000n,
+  reserveNo: 1000n,
+  pool: 25n,
+  volume: 25n,
+  totalYesStake: 25n,
+  totalNoStake: 0n,
+  status: Status.OPEN,
+  outcome: null,
+  proposedOutcome: null,
+  proposedAt: 0n,
+  proposalDeadline: 0n,
+  oracleDisputed: false,
+  oracleFinalized: false,
+  priceYes: 0.5,
+  ...overrides,
 });
 
 const fakeApi = (positions: CocoaPosition[], impl: Partial<CocoaApi> = {}) =>
@@ -60,6 +81,9 @@ const baseState: CocoaState = {
   resolutionSource: "https://example.com/result",
   closeTime: 999_999n,
   oraclePubKey: new Uint8Array(32),
+  optionCount: 1n,
+  unresolvedOptionCount: 1n,
+  options: [option()],
   reserveYes: 1000n,
   reserveNo: 1000n,
   pool: 25n,
@@ -76,6 +100,30 @@ const baseState: CocoaState = {
   positionCount: 1n,
   nullifierCount: 0n,
   priceYes: 0.5,
+};
+
+const withOption = (
+  state: CocoaState,
+  overrides: Partial<CocoaState["options"][number]>,
+): CocoaState => {
+  const nextOption = option(overrides);
+  return {
+    ...state,
+    options: [nextOption],
+    reserveYes: nextOption.reserveYes,
+    reserveNo: nextOption.reserveNo,
+    pool: nextOption.pool,
+    volume: nextOption.volume,
+    totalYesStake: nextOption.totalYesStake,
+    totalNoStake: nextOption.totalNoStake,
+    outcome: nextOption.outcome,
+    proposedOutcome: nextOption.proposedOutcome,
+    proposedAt: nextOption.proposedAt,
+    proposalDeadline: nextOption.proposalDeadline,
+    oracleDisputed: nextOption.oracleDisputed,
+    oracleFinalized: nextOption.oracleFinalized,
+    priceYes: nextOption.priceYes,
+  };
 };
 
 describe("ClaimPanel", () => {
@@ -97,7 +145,7 @@ describe("ClaimPanel", () => {
     render(
       <ClaimPanel
         api={api}
-        state={{ ...baseState, status: Status.RESOLVED, outcome: Side.YES }}
+        state={withOption(baseState, { status: Status.RESOLVED, outcome: Side.YES })}
         wallet={wallet}
       />,
     );
@@ -114,12 +162,13 @@ describe("ClaimPanel", () => {
       <ClaimPanel
         api={fakeApi([position(Side.YES, 100n)])}
         state={{
-          ...baseState,
-          status: Status.RESOLVED,
-          outcome: Side.YES,
-          volume: 800n,
-          totalYesStake: 100n,
-          totalNoStake: 700n,
+          ...withOption(baseState, {
+            status: Status.RESOLVED,
+            outcome: Side.YES,
+            volume: 800n,
+            totalYesStake: 100n,
+            totalNoStake: 700n,
+          }),
         }}
       />,
     );
@@ -137,7 +186,7 @@ describe("ClaimPanel", () => {
     render(
       <ClaimPanel
         api={api}
-        state={{ ...baseState, status: Status.RESOLVED, outcome: Side.YES }}
+        state={withOption(baseState, { status: Status.RESOLVED, outcome: Side.YES })}
         wallet={wallet}
       />,
     );
@@ -159,7 +208,7 @@ describe("ClaimPanel", () => {
     render(
       <ClaimPanel
         api={api}
-        state={{ ...baseState, status: Status.RESOLVED, outcome: Side.YES }}
+        state={withOption(baseState, { status: Status.RESOLVED, outcome: Side.YES })}
         wallet={wallet}
       />,
     );
@@ -181,7 +230,7 @@ describe("ClaimPanel", () => {
     render(
       <ClaimPanel
         api={api}
-        state={{ ...baseState, status: Status.RESOLVED, outcome: Side.YES }}
+        state={withOption(baseState, { status: Status.RESOLVED, outcome: Side.YES })}
         wallet={wallet}
       />,
     );
@@ -198,7 +247,7 @@ describe("ClaimPanel", () => {
     render(
       <ClaimPanel
         api={fakeApi([position(Side.NO, 15n)])}
-        state={{ ...baseState, status: Status.RESOLVED, outcome: Side.YES }}
+        state={withOption(baseState, { status: Status.RESOLVED, outcome: Side.YES })}
       />,
     );
 

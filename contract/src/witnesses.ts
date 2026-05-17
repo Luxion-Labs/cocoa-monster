@@ -3,6 +3,7 @@ import { WitnessContext } from "@midnight-ntwrk/compact-runtime";
 import { Side } from "./managed/cocoa/contract/index.js";
 
 export type CocoaPosition = {
+  readonly optionId: bigint;
   readonly side: Side;
   readonly amount: bigint;
   readonly nonce: Uint8Array;

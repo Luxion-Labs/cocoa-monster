@@ -18,7 +18,9 @@ const getProvider = () =>
 
 export type DiscoveredMarket = KnownMarket & {
   readonly priceYes: number;
+  readonly optionCount: bigint;
   readonly status: "OPEN" | "CLOSED" | "RESOLVED";
+  readonly closeTime?: bigint;
   readonly positionCount: bigint;
   readonly nullifierCount: bigint;
 };
@@ -89,8 +91,10 @@ export const fetchMarketStates = async (
         question: state.question,
         addedAt: Number(state.closeTime) * 1000, // Fallback if not from factory
         priceYes: state.priceYes,
+        optionCount: state.optionCount,
         status:
           state.status === 0 ? "OPEN" : state.status === 1 ? "CLOSED" : "RESOLVED",
+        closeTime: state.closeTime,
         positionCount: state.positionCount,
         nullifierCount: state.nullifierCount,
       });
@@ -121,6 +125,7 @@ export const mergeWithLocalMarkets = (
     merged.set(m.contractAddress, {
       ...m,
       priceYes: 0.5,
+      optionCount: 1n,
       status: "OPEN",
       positionCount: 0n,
       nullifierCount: 0n,
@@ -134,6 +139,7 @@ export const mergeWithLocalMarkets = (
       ...d,
       // Keep the local addedAt if we have it, otherwise use the discovered one
       addedAt: existing?.addedAt ?? d.addedAt,
+      category: existing?.category ?? d.category,
     });
   }
 

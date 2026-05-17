@@ -54,6 +54,7 @@ export const computeOraclePubKey = (oracleSecret: Uint8Array): Uint8Array =>
 
 export type CocoaSimulatorOptions = {
   question: string;
+  options?: readonly string[];
   initialLiquidity: bigint;
   closeTime: bigint;
   /**
@@ -65,6 +66,26 @@ export type CocoaSimulatorOptions = {
   secretKey?: Uint8Array;
   positionNonce?: Uint8Array;
   coinPublicKey?: string;
+};
+
+const MAX_OPTIONS = 8;
+type PaddedOptions = [string, string, string, string, string, string, string, string];
+
+const normalizeOptions = (options: readonly string[] | undefined): string[] => {
+  const normalized = (options ?? ["Outcome"])
+    .map((option) => option.trim())
+    .filter((option) => option.length > 0);
+  if (normalized.length === 0) throw new Error("at least one option is required");
+  if (normalized.length > MAX_OPTIONS) throw new Error("too many options");
+  return normalized;
+};
+
+const padOptions = (options: readonly string[]): PaddedOptions => {
+  const padded = [
+    ...options,
+    ...Array.from({ length: MAX_OPTIONS - options.length }, () => ""),
+  ];
+  return padded as PaddedOptions;
 };
 
 /**
@@ -89,6 +110,8 @@ export class CocoaSimulator {
     this.positionNonce = opts.positionNonce ?? randomBytes32();
     this.oracleSecret = opts.oracleSecret ?? randomBytes32();
     this.oraclePubKey = computeOraclePubKey(this.oracleSecret);
+    const optionLabels = normalizeOptions(opts.options);
+    const paddedOptions = padOptions(optionLabels);
 
     const initialPrivateState = createCocoaPrivateState(
       this.secretKey,
@@ -104,6 +127,8 @@ export class CocoaSimulator {
       opts.initialLiquidity,
       opts.closeTime,
       this.oraclePubKey,
+      BigInt(optionLabels.length),
+      ...paddedOptions,
     );
 
     const address = sampleContractAddress();
@@ -130,11 +155,16 @@ export class CocoaSimulator {
     return readLedger(this.circuitContext.currentQueryContext.state);
   }
 
+  option(optionId = 0n) {
+    return this.ledger().options.lookup(optionId);
+  }
+
   buy(
     side: Side,
     stakeIn: bigint,
     amountOut: bigint,
     nowTs = this.ledger().closeTime - 1n,
+    optionId = 0n,
   ): bigint {
     const positionNonce = randomBytes32();
     this.circuitContext = {
@@ -146,13 +176,14 @@ export class CocoaSimulator {
     };
     const result = this.contract.circuits.buy(
       this.circuitContext,
+      optionId,
       side,
       amountOut,
       stakeIn,
       nowTs,
     );
     this.circuitContext = result.context;
-    this.ownedPositions.push({ side, amount: result.result, nonce: positionNonce });
+    this.ownedPositions.push({ optionId, side, amount: result.result, nonce: positionNonce });
     return result.result;
   }
 
@@ -161,9 +192,10 @@ export class CocoaSimulator {
     this.circuitContext = result.context;
   }
 
-  proposeOutcome(side: Side, nowTs: bigint, disputeWindowSeconds: bigint): void {
+  proposeOutcome(side: Side, nowTs: bigint, disputeWindowSeconds: bigint, optionId = 0n): void {
     const result = this.contract.circuits.proposeOutcome(
       this.circuitContext,
+      optionId,
       side,
       nowTs,
       disputeWindowSeconds,
@@ -171,37 +203,40 @@ export class CocoaSimulator {
     this.circuitContext = result.context;
   }
 
-  disputeOutcome(nowTs: bigint): void {
+  disputeOutcome(nowTs: bigint, optionId = 0n): void {
     const result = this.contract.circuits.disputeOutcome(
       this.circuitContext,
+      optionId,
       nowTs,
     );
     this.circuitContext = result.context;
   }
 
-  finalizeOutcome(nowTs: bigint): void {
+  finalizeOutcome(nowTs: bigint, optionId = 0n): void {
     const result = this.contract.circuits.finalizeOutcome(
       this.circuitContext,
+      optionId,
       nowTs,
     );
     this.circuitContext = result.context;
   }
 
-  resolve(side: Side, nowTs: bigint): void {
+  resolve(side: Side, nowTs: bigint, optionId = 0n): void {
     const result = this.contract.circuits.resolve(
       this.circuitContext,
+      optionId,
       side,
       nowTs,
     );
     this.circuitContext = result.context;
   }
 
-  redeem(side: Side, amountOut: bigint, payout?: bigint): bigint {
-    const l = this.ledger();
-    const winningStake = l.outcome === Side.YES ? l.totalYesStake : l.totalNoStake;
-    const payoutAmount = payout ?? (winningStake > 0n ? (amountOut * l.volume) / winningStake : 1n);
+  redeem(side: Side, amountOut: bigint, payout?: bigint, optionId = 0n): bigint {
+    const option = this.option(optionId);
+    const winningStake = option.outcome === Side.YES ? option.totalYesStake : option.totalNoStake;
+    const payoutAmount = payout ?? (winningStake > 0n ? (amountOut * option.volume) / winningStake : 1n);
     const position = this.ownedPositions.find(
-      (p) => p.side === side && p.amount === amountOut,
+      (p) => p.optionId === optionId && p.side === side && p.amount === amountOut,
     );
     if (position) {
       this.circuitContext = {
@@ -214,6 +249,7 @@ export class CocoaSimulator {
     }
     const result = this.contract.circuits.redeem(
       this.circuitContext,
+      optionId,
       side,
       amountOut,
       payoutAmount,

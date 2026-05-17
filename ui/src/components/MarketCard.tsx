@@ -1,13 +1,19 @@
 import { Link } from "react-router-dom";
 
 import { formatPriceYes, truncateAddress } from "../lib/format";
+import {
+  marketDisplayStatusClassName,
+  marketDisplayStatusLabel,
+  type MarketDisplayStatus,
+} from "../lib/market-status";
 import type { KnownMarket } from "../lib/markets";
 
 type Props = {
   market: KnownMarket;
   priceYes?: number;
-  status?: "OPEN" | "CLOSED" | "RESOLVED";
+  status?: MarketDisplayStatus;
   category?: string;
+  optionCount?: bigint;
   positionCount?: bigint;
   volumeLabel?: string;
 };
@@ -17,6 +23,7 @@ export const MarketCard = ({
   priceYes,
   status,
   category,
+  optionCount,
   positionCount,
   volumeLabel,
 }: Props) => (
@@ -38,13 +45,18 @@ export const MarketCard = ({
       </div>
       {status !== undefined && (
         <span
-          className={`market-card__status market-card__status--${status.toLowerCase()}`}
+          className={`market-card__status market-card__status--${marketDisplayStatusClassName(status)}`}
         >
-          {status === "OPEN" ? "Open" : status === "CLOSED" ? "Closed" : "Resolved"}
+          {marketDisplayStatusLabel(status)}
         </span>
       )}
     </div>
     <div className="market-card__question">{market.question}</div>
+    {optionCount !== undefined && (
+      <div className="market-card__options-count">
+        {optionCount.toString()} {optionCount === 1n ? "option" : "options"}
+      </div>
+    )}
     {priceYes !== undefined && (
       <div
         className="market-card__outcomes"

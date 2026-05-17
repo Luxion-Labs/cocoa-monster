@@ -10,12 +10,28 @@ import { getRuntimeConfig } from "./runtime-config";
 const STORAGE_KEY = "cocoa.knownMarkets";
 const FACTORY_STORAGE_KEY = "cocoa.marketFactoryAddress";
 
+export const MARKET_CATEGORIES = [
+  "Crypto",
+  "Politics",
+  "Sports",
+  "Culture",
+  "Tech",
+  "Markets",
+] as const;
+
+export type MarketCategory = (typeof MARKET_CATEGORIES)[number];
+
 export type KnownMarket = {
   readonly contractAddress: string;
   readonly question: string;
+  readonly category?: MarketCategory;
   /** Timestamp the user first saw or deployed this market. */
   readonly addedAt: number;
 };
+
+const isMarketCategory = (value: unknown): value is MarketCategory =>
+  typeof value === "string" &&
+  (MARKET_CATEGORIES as readonly string[]).includes(value);
 
 const safeStorage = (): Storage | null => {
   if (typeof window === "undefined") return null;
@@ -34,14 +50,24 @@ export const listKnownMarkets = (): KnownMarket[] => {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (m): m is KnownMarket =>
-        typeof m === "object" &&
-        m !== null &&
-        typeof m.contractAddress === "string" &&
-        typeof m.question === "string" &&
-        typeof m.addedAt === "number",
-    );
+    return parsed
+      .filter(
+        (m): m is KnownMarket =>
+          typeof m === "object" &&
+          m !== null &&
+          typeof m.contractAddress === "string" &&
+          typeof m.question === "string" &&
+          typeof m.addedAt === "number",
+      )
+      .map((m) =>
+        isMarketCategory(m.category)
+          ? { ...m, category: m.category }
+          : {
+              contractAddress: m.contractAddress,
+              question: m.question,
+              addedAt: m.addedAt,
+            },
+      );
   } catch {
     return [];
   }

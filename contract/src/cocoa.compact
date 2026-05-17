@@ -5,6 +5,23 @@ import CompactStandardLibrary;
 export enum Side { YES, NO }
 export enum Status { OPEN, CLOSED, RESOLVED }
 
+export struct OptionState {
+  label: Opaque<"string">;
+  reserveYes: Uint<64>;
+  reserveNo: Uint<64>;
+  pool: Uint<64>;
+  volume: Uint<64>;
+  totalYesStake: Uint<64>;
+  totalNoStake: Uint<64>;
+  status: Status;
+  outcome: Side;
+  proposedOutcome: Side;
+  proposedAt: Uint<64>;
+  proposalDeadline: Uint<64>;
+  oracleDisputed: Uint<64>;
+  oracleFinalized: Uint<64>;
+}
+
 // ----------------- Public market state -----------------
 export ledger question: Opaque<"string">;
 export ledger resolutionRules: Opaque<"string">;
@@ -17,26 +34,17 @@ export ledger closeTime: Uint<64>;
 // on-chain even at deploy time.
 export ledger oraclePubKey: Bytes<32>;
 
-// CPMM reserves. YES probability = reserveNo / (reserveYes + reserveNo).
-export ledger reserveYes: Uint<64>;
-export ledger reserveNo: Uint<64>;
+// A question can contain multiple independently resolved YES/NO options.
+// Each option has isolated reserves, pool, stake totals, and oracle state.
+export ledger optionCount: Uint<64>;
+export ledger unresolvedOptionCount: Uint<64>;
+export ledger options: Map<Uint<64>, OptionState>;
 
-// Contract-held public NIGHT collateral. Every accepted bet receives
-// unshielded native NIGHT into this pool before a position is recorded.
-export ledger pool: Uint<64>;
-export ledger volume: Uint<64>;
-export ledger totalYesStake: Uint<64>;
-export ledger totalNoStake: Uint<64>;
-
-// Lifecycle. Markets trade while OPEN, stop accepting buys when CLOSED,
-// and pay winning positions after the oracle moves them to RESOLVED.
+// Lifecycle. The parent market trades while OPEN and stops accepting buys
+// once CLOSED. Individual options move to RESOLVED as the oracle resolves
+// each YES/NO independently; the parent market is RESOLVED only after every
+// option has resolved.
 export ledger status: Status;
-export ledger outcome: Side;
-export ledger proposedOutcome: Side;
-export ledger proposedAt: Uint<64>;
-export ledger proposalDeadline: Uint<64>;
-export ledger oracleDisputed: Uint<64>;
-export ledger oracleFinalized: Uint<64>;
 
 // Privacy: anonymous position commitments and one-shot redemption nullifiers.
 export ledger positions: Set<Bytes<32>>;
@@ -49,21 +57,37 @@ constructor(
   initialLiquidity: Uint<64>,
   closeTimestamp: Uint<64>,
   oracleId: Bytes<32>,
+  providedOptionCount: Uint<64>,
+  option0: Opaque<"string">,
+  option1: Opaque<"string">,
+  option2: Opaque<"string">,
+  option3: Opaque<"string">,
+  option4: Opaque<"string">,
+  option5: Opaque<"string">,
+  option6: Opaque<"string">,
+  option7: Opaque<"string">,
 ) {
   question = disclose(q);
   resolutionRules = disclose(rules);
   resolutionSource = disclose(source);
-  reserveYes = disclose(initialLiquidity);
-  reserveNo = disclose(initialLiquidity);
   closeTime = disclose(closeTimestamp);
   oraclePubKey = disclose(oracleId);
   status = Status.OPEN;
-  proposedAt = 0;
-  proposalDeadline = 0;
-  oracleDisputed = 0;
-  oracleFinalized = 0;
-  totalYesStake = 0;
-  totalNoStake = 0;
+
+  const count = disclose(providedOptionCount);
+  assert(count > 0, "option count must be positive");
+  assert(count <= 8, "too many options");
+  optionCount = count;
+  unresolvedOptionCount = count;
+
+  if (count > 0) { options.insert(0, newOption(option0, initialLiquidity)); }
+  if (count > 1) { options.insert(1, newOption(option1, initialLiquidity)); }
+  if (count > 2) { options.insert(2, newOption(option2, initialLiquidity)); }
+  if (count > 3) { options.insert(3, newOption(option3, initialLiquidity)); }
+  if (count > 4) { options.insert(4, newOption(option4, initialLiquidity)); }
+  if (count > 5) { options.insert(5, newOption(option5, initialLiquidity)); }
+  if (count > 6) { options.insert(6, newOption(option6, initialLiquidity)); }
+  if (count > 7) { options.insert(7, newOption(option7, initialLiquidity)); }
 }
 
 // ----------------- Witnesses (private) -----------------
@@ -75,43 +99,84 @@ witness oracleSecret(): Bytes<32>;
 
 // ----------------- Trading -----------------
 
-// Buy outcome exposure of `side` with real unshielded NIGHT. `amountOut` is
-// the UI's CPMM quote used to update visible odds; the redeemable position
-// amount is the actual NIGHT stake paid into the contract pool.
-export circuit buy(side: Side, amountOut: Uint<64>, stakeAmount: Uint<64>, nowTs: Uint<64>): Uint<64> {
+// Buy outcome exposure of `side` on one option with real unshielded NIGHT.
+// `amountOut` is the UI's CPMM quote used to update visible odds; the
+// redeemable position amount is the actual NIGHT stake paid into that option's
+// collateral pool.
+export circuit buy(
+  optionId: Uint<64>,
+  side: Side,
+  amountOut: Uint<64>,
+  stakeAmount: Uint<64>,
+  nowTs: Uint<64>,
+): Uint<64> {
   assert(status == Status.OPEN, "market not open");
   const publicNow = disclose(nowTs);
   assert(publicNow < closeTime, "market closed");
+  const publicOptionId = disclose(optionId);
+  assert(options.member(publicOptionId), "unknown option");
+  const option = options.lookup(publicOptionId);
+  assert(option.status == Status.OPEN, "option not open");
+
   const publicStake = disclose(stakeAmount);
   const publicAmount = disclose(amountOut);
   assert(publicStake > 0, "stake must be positive");
   assert(publicAmount > 0, "amount must be positive");
   const publicSide = disclose(side);
-  const k = reserveYes * reserveNo;
+  const k = option.reserveYes * option.reserveNo;
   const sk = localSecretKey();
   const nonce = positionNonce();
+
   if (publicSide == Side.YES) {
-    const newReserveNo = (reserveNo + publicStake) as Uint<64>;
-    assert(reserveYes > publicAmount, "insufficient YES liquidity");
-    const newReserveYes = reserveYes - publicAmount;
+    const newReserveNo = (option.reserveNo + publicStake) as Uint<64>;
+    assert(option.reserveYes > publicAmount, "insufficient YES liquidity");
+    const newReserveYes = option.reserveYes - publicAmount;
     assert(newReserveYes * newReserveNo >= k, "amount exceeds CPMM quote");
-    reserveYes = reserveYes - publicAmount;
-    reserveNo = newReserveNo;
     receiveStake(publicStake);
-    totalYesStake = (totalYesStake + publicStake) as Uint<64>;
-    const c = disclose(commitment(sk, nonce, publicSide, publicStake));
+    const updated = OptionState {
+      label: option.label,
+      reserveYes: newReserveYes,
+      reserveNo: newReserveNo,
+      pool: (option.pool + publicStake) as Uint<64>,
+      volume: (option.volume + publicStake) as Uint<64>,
+      totalYesStake: (option.totalYesStake + publicStake) as Uint<64>,
+      totalNoStake: option.totalNoStake,
+      status: option.status,
+      outcome: option.outcome,
+      proposedOutcome: option.proposedOutcome,
+      proposedAt: option.proposedAt,
+      proposalDeadline: option.proposalDeadline,
+      oracleDisputed: option.oracleDisputed,
+      oracleFinalized: option.oracleFinalized,
+    };
+    options.insert(publicOptionId, updated);
+    const c = disclose(commitment(sk, nonce, publicOptionId, publicSide, publicStake));
     positions.insert(c);
     return publicStake;
   } else {
-    const newReserveYes = (reserveYes + publicStake) as Uint<64>;
-    assert(reserveNo > publicAmount, "insufficient NO liquidity");
-    const newReserveNo = reserveNo - publicAmount;
+    const newReserveYes = (option.reserveYes + publicStake) as Uint<64>;
+    assert(option.reserveNo > publicAmount, "insufficient NO liquidity");
+    const newReserveNo = option.reserveNo - publicAmount;
     assert(newReserveYes * newReserveNo >= k, "amount exceeds CPMM quote");
-    reserveNo = reserveNo - publicAmount;
-    reserveYes = newReserveYes;
     receiveStake(publicStake);
-    totalNoStake = (totalNoStake + publicStake) as Uint<64>;
-    const c = disclose(commitment(sk, nonce, publicSide, publicStake));
+    const updated = OptionState {
+      label: option.label,
+      reserveYes: newReserveYes,
+      reserveNo: newReserveNo,
+      pool: (option.pool + publicStake) as Uint<64>,
+      volume: (option.volume + publicStake) as Uint<64>,
+      totalYesStake: option.totalYesStake,
+      totalNoStake: (option.totalNoStake + publicStake) as Uint<64>,
+      status: option.status,
+      outcome: option.outcome,
+      proposedOutcome: option.proposedOutcome,
+      proposedAt: option.proposedAt,
+      proposalDeadline: option.proposalDeadline,
+      oracleDisputed: option.oracleDisputed,
+      oracleFinalized: option.oracleFinalized,
+    };
+    options.insert(publicOptionId, updated);
+    const c = disclose(commitment(sk, nonce, publicOptionId, publicSide, publicStake));
     positions.insert(c);
     return publicStake;
   }
@@ -120,101 +185,210 @@ export circuit buy(side: Side, amountOut: Uint<64>, stakeAmount: Uint<64>, nowTs
 // ----------------- Resolution -----------------
 
 // Anyone can close the market after `closeTime`. This makes the end of
-// trading explicit on-chain before the optimistic oracle finalizes.
+// trading explicit on-chain before the oracle resolves individual options.
 export circuit close(nowTs: Uint<64>): [] {
   assert(status == Status.OPEN, "market not open");
   const publicNow = disclose(nowTs);
   assert(publicNow >= closeTime, "market still open");
   status = Status.CLOSED;
+  closeOption(0);
+  closeOption(1);
+  closeOption(2);
+  closeOption(3);
+  closeOption(4);
+  closeOption(5);
+  closeOption(6);
+  closeOption(7);
 }
 
-// Optimistic oracle proposal recorded on-chain. Anyone may propose after the
-// market is closed; the dispute window is supplied by the caller and made
-// public through `proposalDeadline`.
-export circuit proposeOutcome(side: Side, nowTs: Uint<64>, disputeWindowSeconds: Uint<64>): [] {
+// Optimistic oracle proposal recorded on-chain for one option. Anyone may
+// propose after the market is closed; the dispute window is supplied by the
+// caller and made public through that option's `proposalDeadline`.
+export circuit proposeOutcome(
+  optionId: Uint<64>,
+  side: Side,
+  nowTs: Uint<64>,
+  disputeWindowSeconds: Uint<64>,
+): [] {
   assert(status == Status.CLOSED, "market not closed");
-  assert(proposedAt == 0, "outcome already proposed");
+  const publicOptionId = disclose(optionId);
+  assert(options.member(publicOptionId), "unknown option");
+  const option = options.lookup(publicOptionId);
+  assert(option.status == Status.CLOSED, "option not closed");
+  assert(option.proposedAt == 0, "outcome already proposed");
   const publicNow = disclose(nowTs);
   const publicWindow = disclose(disputeWindowSeconds);
   assert(publicWindow > 0, "invalid dispute window");
-  proposedOutcome = disclose(side);
-  proposedAt = publicNow;
-  proposalDeadline = (publicNow + publicWindow) as Uint<64>;
-  oracleDisputed = 0;
-  oracleFinalized = 0;
+  const updated = OptionState {
+    label: option.label,
+    reserveYes: option.reserveYes,
+    reserveNo: option.reserveNo,
+    pool: option.pool,
+    volume: option.volume,
+    totalYesStake: option.totalYesStake,
+    totalNoStake: option.totalNoStake,
+    status: option.status,
+    outcome: option.outcome,
+    proposedOutcome: disclose(side),
+    proposedAt: publicNow,
+    proposalDeadline: (publicNow + publicWindow) as Uint<64>,
+    oracleDisputed: 0,
+    oracleFinalized: 0,
+  };
+  options.insert(publicOptionId, updated);
 }
 
 // Dispute the current proposal before its deadline. Arbitration is intentionally
-// not modelled yet; disputed markets cannot be finalized by this circuit.
-export circuit disputeOutcome(nowTs: Uint<64>): [] {
+// not modelled yet; disputed options cannot be finalized by this circuit.
+export circuit disputeOutcome(optionId: Uint<64>, nowTs: Uint<64>): [] {
   assert(status == Status.CLOSED, "market not closed");
-  assert(proposedAt > 0, "no proposed outcome");
-  assert(oracleFinalized == 0, "outcome already finalized");
+  const publicOptionId = disclose(optionId);
+  assert(options.member(publicOptionId), "unknown option");
+  const option = options.lookup(publicOptionId);
+  assert(option.status == Status.CLOSED, "option not closed");
+  assert(option.proposedAt > 0, "no proposed outcome");
+  assert(option.oracleFinalized == 0, "outcome already finalized");
   const publicNow = disclose(nowTs);
-  assert(publicNow <= proposalDeadline, "dispute window has ended");
-  oracleDisputed = 1;
+  assert(publicNow <= option.proposalDeadline, "dispute window has ended");
+  const updated = OptionState {
+    label: option.label,
+    reserveYes: option.reserveYes,
+    reserveNo: option.reserveNo,
+    pool: option.pool,
+    volume: option.volume,
+    totalYesStake: option.totalYesStake,
+    totalNoStake: option.totalNoStake,
+    status: option.status,
+    outcome: option.outcome,
+    proposedOutcome: option.proposedOutcome,
+    proposedAt: option.proposedAt,
+    proposalDeadline: option.proposalDeadline,
+    oracleDisputed: 1,
+    oracleFinalized: option.oracleFinalized,
+  };
+  options.insert(publicOptionId, updated);
 }
 
-// Finalize an undisputed optimistic proposal and resolve the market on-chain.
-export circuit finalizeOutcome(nowTs: Uint<64>): [] {
+// Finalize an undisputed optimistic proposal and resolve one option on-chain.
+export circuit finalizeOutcome(optionId: Uint<64>, nowTs: Uint<64>): [] {
   assert(status == Status.CLOSED, "market not closed");
-  assert(proposedAt > 0, "no proposed outcome");
-  assert(oracleDisputed == 0, "market is disputed");
-  assert(oracleFinalized == 0, "outcome already finalized");
+  const publicOptionId = disclose(optionId);
+  assert(options.member(publicOptionId), "unknown option");
+  const option = options.lookup(publicOptionId);
+  assert(option.status == Status.CLOSED, "option not closed");
+  assert(option.proposedAt > 0, "no proposed outcome");
+  assert(option.oracleDisputed == 0, "option is disputed");
+  assert(option.oracleFinalized == 0, "outcome already finalized");
   const publicNow = disclose(nowTs);
-  assert(publicNow >= proposalDeadline, "dispute window is still open");
-  outcome = proposedOutcome;
-  oracleFinalized = 1;
-  status = Status.RESOLVED;
+  assert(publicNow >= option.proposalDeadline, "dispute window is still open");
+  const updated = OptionState {
+    label: option.label,
+    reserveYes: option.reserveYes,
+    reserveNo: option.reserveNo,
+    pool: option.pool,
+    volume: option.volume,
+    totalYesStake: option.totalYesStake,
+    totalNoStake: option.totalNoStake,
+    status: Status.RESOLVED,
+    outcome: option.proposedOutcome,
+    proposedOutcome: option.proposedOutcome,
+    proposedAt: option.proposedAt,
+    proposalDeadline: option.proposalDeadline,
+    oracleDisputed: option.oracleDisputed,
+    oracleFinalized: 1,
+  };
+  options.insert(publicOptionId, updated);
+  completeOptionResolution();
 }
 
-// Trusted oracle resolves the market in a single step. The circuit
-// recomputes `H("cocoa:oracle:" || oracleSecret)` from the witness and
-// asserts it matches the on-chain `oraclePubKey`. Anyone who is not the
-// oracle has no witness for `oracleSecret` and the assertion fails.
-export circuit resolve(side: Side, nowTs: Uint<64>): [] {
+// Trusted oracle resolves one option in a single step. The circuit recomputes
+// `H("cocoa:oracle:" || oracleSecret)` from the witness and asserts it matches
+// the on-chain `oraclePubKey`.
+export circuit resolve(optionId: Uint<64>, side: Side, nowTs: Uint<64>): [] {
   assert(status == Status.CLOSED, "market not closed");
   const publicNow = disclose(nowTs);
+  const publicOptionId = disclose(optionId);
+  assert(options.member(publicOptionId), "unknown option");
+  const option = options.lookup(publicOptionId);
+  assert(option.status == Status.CLOSED, "option not closed");
   const sk = oracleSecret();
   const expected = disclose(oracleCommitment(sk));
   assert(expected == oraclePubKey, "not the oracle");
-  outcome = disclose(side);
-  status = Status.RESOLVED;
+  const updated = OptionState {
+    label: option.label,
+    reserveYes: option.reserveYes,
+    reserveNo: option.reserveNo,
+    pool: option.pool,
+    volume: option.volume,
+    totalYesStake: option.totalYesStake,
+    totalNoStake: option.totalNoStake,
+    status: Status.RESOLVED,
+    outcome: disclose(side),
+    proposedOutcome: option.proposedOutcome,
+    proposedAt: option.proposedAt,
+    proposalDeadline: option.proposalDeadline,
+    oracleDisputed: option.oracleDisputed,
+    oracleFinalized: 1,
+  };
+  options.insert(publicOptionId, updated);
+  completeOptionResolution();
 }
 
-// Privately claim a winning position. The user proves
+// Privately claim a winning position for one option. The user proves
 // ownership of an existing commitment without revealing their identity
 // (no per-user indexing on chain), then publishes a one-shot nullifier
-// so they can't claim the same position twice. The payout is the
-// position's pro-rata share of the whole contract pool among winners.
-// Compact circuits do not divide directly, so the caller supplies the
-// floor-divided payout and the circuit verifies it by multiplication:
-//   payout = floor(stake * totalPool / totalWinningStake)
-export circuit redeem(side: Side, stakeAmount: Uint<64>, payoutAmount: Uint<64>, recipient: UserAddress): Uint<64> {
-  assert(status == Status.RESOLVED, "market not resolved");
+// so they can't claim the same position twice. The payout is the position's
+// pro-rata share of that option's pool among that option's winners.
+export circuit redeem(
+  optionId: Uint<64>,
+  side: Side,
+  stakeAmount: Uint<64>,
+  payoutAmount: Uint<64>,
+  recipient: UserAddress,
+): Uint<64> {
+  const publicOptionId = disclose(optionId);
+  assert(options.member(publicOptionId), "unknown option");
+  const option = options.lookup(publicOptionId);
+  assert(option.status == Status.RESOLVED, "option not resolved");
   const publicSide = disclose(side);
   const publicAmount = disclose(stakeAmount);
   const publicPayout = disclose(payoutAmount);
-  assert(outcome == publicSide, "wrong side");
+  assert(option.outcome == publicSide, "wrong side");
 
   // Verify the caller actually holds this position before publishing
   // the nullifier, so non-holders cannot mark arbitrary claims spent.
   const sk = localSecretKey();
   const nonce = positionNonce();
-  const c = disclose(commitment(sk, nonce, publicSide, publicAmount));
+  const c = disclose(commitment(sk, nonce, publicOptionId, publicSide, publicAmount));
   assert(positions.member(c), "no such position");
-  const n = disclose(nullifier(sk, nonce, publicSide, publicAmount));
+  const n = disclose(nullifier(sk, nonce, publicOptionId, publicSide, publicAmount));
   assert(!nullifiers.member(n), "already redeemed");
   nullifiers.insert(n);
   const winningStake =
-    outcome == Side.YES ? totalYesStake : totalNoStake;
+    option.outcome == Side.YES ? option.totalYesStake : option.totalNoStake;
   assert(winningStake > 0, "no winning stake");
-  const payoutNumerator = publicAmount * volume;
+  const payoutNumerator = publicAmount * option.volume;
   assert(publicPayout > 0, "payout is zero");
   assert(publicPayout * winningStake <= payoutNumerator, "payout too high");
   assert((publicPayout + 1) * winningStake > payoutNumerator, "payout too low");
-  assert(pool >= publicPayout, "insufficient pool");
-  pool = pool - publicPayout;
+  assert(option.pool >= publicPayout, "insufficient pool");
+  const updated = OptionState {
+    label: option.label,
+    reserveYes: option.reserveYes,
+    reserveNo: option.reserveNo,
+    pool: option.pool - publicPayout,
+    volume: option.volume,
+    totalYesStake: option.totalYesStake,
+    totalNoStake: option.totalNoStake,
+    status: option.status,
+    outcome: option.outcome,
+    proposedOutcome: option.proposedOutcome,
+    proposedAt: option.proposedAt,
+    proposalDeadline: option.proposalDeadline,
+    oracleDisputed: option.oracleDisputed,
+    oracleFinalized: option.oracleFinalized,
+  };
+  options.insert(publicOptionId, updated);
   sendUnshielded(
     nativeToken(),
     publicPayout as Uint<128>,
@@ -224,24 +398,89 @@ export circuit redeem(side: Side, stakeAmount: Uint<64>, payoutAmount: Uint<64>,
 }
 
 // ----------------- Helpers -----------------
-// Internal — take sk + nonce as parameters so callers stay in charge of
-// when witness values get hashed and disclosed.
 
-circuit commitment(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<64>): Bytes<32> {
-  return persistentHash<Vector<5, Bytes<32>>>([
+circuit newOption(label: Opaque<"string">, initialLiquidity: Uint<64>): OptionState {
+  const liquidity = disclose(initialLiquidity);
+  return OptionState {
+    label: disclose(label),
+    reserveYes: liquidity,
+    reserveNo: liquidity,
+    pool: 0,
+    volume: 0,
+    totalYesStake: 0,
+    totalNoStake: 0,
+    status: Status.OPEN,
+    outcome: Side.NO,
+    proposedOutcome: Side.NO,
+    proposedAt: 0,
+    proposalDeadline: 0,
+    oracleDisputed: 0,
+    oracleFinalized: 0,
+  };
+}
+
+circuit closeOption(optionId: Uint<64>): [] {
+  if (options.member(optionId)) {
+    const option = options.lookup(optionId);
+    const updated = OptionState {
+      label: option.label,
+      reserveYes: option.reserveYes,
+      reserveNo: option.reserveNo,
+      pool: option.pool,
+      volume: option.volume,
+      totalYesStake: option.totalYesStake,
+      totalNoStake: option.totalNoStake,
+      status: Status.CLOSED,
+      outcome: option.outcome,
+      proposedOutcome: option.proposedOutcome,
+      proposedAt: option.proposedAt,
+      proposalDeadline: option.proposalDeadline,
+      oracleDisputed: option.oracleDisputed,
+      oracleFinalized: option.oracleFinalized,
+    };
+    options.insert(optionId, updated);
+  }
+}
+
+circuit completeOptionResolution(): [] {
+  const remaining = unresolvedOptionCount - 1;
+  unresolvedOptionCount = remaining;
+  if (remaining == 0) {
+    status = Status.RESOLVED;
+  }
+}
+
+// Internal - take sk + nonce as parameters so callers stay in charge of
+// when witness values get hashed and disclosed.
+circuit commitment(
+  sk: Bytes<32>,
+  nonce: Bytes<32>,
+  optionId: Uint<64>,
+  side: Side,
+  amount: Uint<64>,
+): Bytes<32> {
+  return persistentHash<Vector<6, Bytes<32>>>([
     pad(32, "cocoa:pos:"),
     sk,
     nonce,
+    optionId as Field as Bytes<32>,
     amount as Field as Bytes<32>,
     side as Field as Bytes<32>,
   ]);
 }
 
-circuit nullifier(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<64>): Bytes<32> {
-  return persistentHash<Vector<5, Bytes<32>>>([
+circuit nullifier(
+  sk: Bytes<32>,
+  nonce: Bytes<32>,
+  optionId: Uint<64>,
+  side: Side,
+  amount: Uint<64>,
+): Bytes<32> {
+  return persistentHash<Vector<6, Bytes<32>>>([
     pad(32, "cocoa:null:"),
     sk,
     nonce,
+    optionId as Field as Bytes<32>,
     amount as Field as Bytes<32>,
     side as Field as Bytes<32>,
   ]);
@@ -249,11 +488,9 @@ circuit nullifier(sk: Bytes<32>, nonce: Bytes<32>, side: Side, amount: Uint<64>)
 
 circuit receiveStake(stake: Uint<64>): [] {
   receiveUnshielded(nativeToken(), stake as Uint<128>);
-  pool = (pool + stake) as Uint<64>;
-  volume = (volume + stake) as Uint<64>;
 }
 
-// Public commitment to an oracle secret.  `H("cocoa:oracle:" || sk)`.
+// Public commitment to an oracle secret. `H("cocoa:oracle:" || sk)`.
 circuit oracleCommitment(sk: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([
     pad(32, "cocoa:oracle:"),

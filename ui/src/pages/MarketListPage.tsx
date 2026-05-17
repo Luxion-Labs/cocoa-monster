@@ -6,7 +6,16 @@ import { MarketListSkeleton } from "../components/Skeleton";
 import { AreaChart } from "../components/AreaChart";
 import { XAxis, YAxis, CartesianGrid } from "@subframe/core";
 import { formatPriceYes } from "../lib/format";
-import { listKnownMarkets, type KnownMarket } from "../lib/markets";
+import {
+  listKnownMarkets,
+  MARKET_CATEGORIES,
+  type KnownMarket,
+} from "../lib/markets";
+import {
+  displayStatusForMarket,
+  marketDisplayStatusClassName,
+  marketDisplayStatusLabel,
+} from "../lib/market-status";
 import {
   fetchMarketStates,
   fetchSharedMarkets,
@@ -14,7 +23,9 @@ import {
   type DiscoveredMarket,
 } from "../lib/discovery";
 
-const categories = ["All", "Crypto", "Politics", "Sports", "Culture", "Tech"];
+const categories = ["All", ...MARKET_CATEGORIES] as const;
+
+const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
 const categoryForQuestion = (question: string): string => {
   const q = question.toLowerCase();
@@ -36,6 +47,9 @@ const categoryForQuestion = (question: string): string => {
   return "Markets";
 };
 
+const categoryForMarket = (market: KnownMarket): string =>
+  market.category ?? categoryForQuestion(market.question);
+
 const volumeLabelFor = (market: DiscoveredMarket): string => {
   const seed = [...market.contractAddress].reduce(
     (sum, char) => sum + char.charCodeAt(0),
@@ -48,6 +62,7 @@ const volumeLabelFor = (market: DiscoveredMarket): string => {
 const toPlaceholderMarket = (market: KnownMarket): DiscoveredMarket => ({
   ...market,
   priceYes: 0.5,
+  optionCount: 1n,
   status: "OPEN",
   positionCount: 0n,
   nullifierCount: 0n,
@@ -70,6 +85,7 @@ export const MarketListPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [currentTime, setCurrentTime] = useState(nowSeconds);
 
   const loadMarkets = async (cancelled = { current: false }) => {
     setIsLoading(true);
@@ -118,13 +134,20 @@ export const MarketListPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(nowSeconds());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const handleReload = () => {
     loadMarkets();
   };
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredMarkets = markets.filter((market) => {
-    const category = categoryForQuestion(market.question);
+    const category = categoryForMarket(market);
     const matchesCategory =
       activeCategory === "All" || category === activeCategory;
     const matchesQuery =
@@ -135,8 +158,18 @@ export const MarketListPage = () => {
   });
 
   const featuredMarket = useMemo(() => {
-    return filteredMarkets.find((m) => m.status === "OPEN") || filteredMarkets[0] || null;
-  }, [filteredMarkets]);
+    return (
+      filteredMarkets.find(
+        (m) => displayStatusForMarket(m, currentTime) === "OPEN",
+      ) ||
+      filteredMarkets[0] ||
+      null
+    );
+  }, [filteredMarkets, currentTime]);
+  const featuredIsMultiOption = (featuredMarket?.optionCount ?? 1n) > 1n;
+  const featuredStatus = featuredMarket
+    ? displayStatusForMarket(featuredMarket, currentTime)
+    : null;
 
   const simulatedHistory = useMemo(() => {
     if (!featuredMarket) return [];
@@ -159,9 +192,15 @@ export const MarketListPage = () => {
     return ticks;
   }, [featuredMarket]);
 
-  const openCount = markets.filter((m) => m.status === "OPEN").length;
+  const openCount = markets.filter(
+    (m) => displayStatusForMarket(m, currentTime) === "OPEN",
+  ).length;
   const totalPositions = markets.reduce(
     (sum, market) => sum + market.positionCount,
+    0n,
+  );
+  const totalOptions = markets.reduce(
+    (sum, market) => sum + market.optionCount,
     0n,
   );
 
@@ -190,10 +229,18 @@ export const MarketListPage = () => {
         <div className="featured-panel" data-testid="featured-panel">
           <div className="featured-panel__left">
             <div className="featured-panel__top">
-              <span className="featured-panel__live-badge">
-                <span className="featured-panel__live-dot" />
-                LIVE
-              </span>
+              {featuredStatus && (
+                <span
+                  className={`featured-panel__live-badge featured-panel__live-badge--${marketDisplayStatusClassName(featuredStatus)}`}
+                >
+                  {featuredStatus === "OPEN" && (
+                    <span className="featured-panel__live-dot" />
+                  )}
+                  {featuredStatus === "OPEN"
+                    ? "LIVE"
+                    : marketDisplayStatusLabel(featuredStatus)}
+                </span>
+              )}
               <span className="shielded-badge" title="Zero-knowledge private market position">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '3px', verticalAlign: 'middle' }}>
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -205,20 +252,50 @@ export const MarketListPage = () => {
             <Link to={`/m/${featuredMarket.contractAddress}`} className="featured-panel__title">
               <h2>{featuredMarket.question}</h2>
             </Link>
-            <div className="featured-panel__bet-pills">
-              <Link to={`/m/${featuredMarket.contractAddress}`} className="btn btn--yes-pill" data-testid="featured-yes-bet">
-                <span>YES</span>
-                <strong>{formatPriceYes(featuredMarket.priceYes)}</strong>
+            {featuredIsMultiOption ? (
+              <Link
+                to={`/m/${featuredMarket.contractAddress}`}
+                className="featured-panel__option-summary"
+                data-testid="featured-option-summary"
+              >
+                <span>{featuredMarket.optionCount.toString()} option markets</span>
+                <strong>View all options</strong>
               </Link>
-              <Link to={`/m/${featuredMarket.contractAddress}`} className="btn btn--no-pill" data-testid="featured-no-bet">
-                <span>NO</span>
-                <strong>{formatPriceYes(1 - featuredMarket.priceYes)}</strong>
-              </Link>
-            </div>
+            ) : (
+              <div className="featured-panel__bet-pills">
+                <Link to={`/m/${featuredMarket.contractAddress}`} className="btn btn--yes-pill" data-testid="featured-yes-bet">
+                  <span>YES</span>
+                  <strong>{formatPriceYes(featuredMarket.priceYes)}</strong>
+                </Link>
+                <Link to={`/m/${featuredMarket.contractAddress}`} className="btn btn--no-pill" data-testid="featured-no-bet">
+                  <span>NO</span>
+                  <strong>{formatPriceYes(1 - featuredMarket.priceYes)}</strong>
+                </Link>
+              </div>
+            )}
           </div>
           <div className="featured-panel__right">
             <div className="featured-panel__chart-container">
-              {simulatedHistory.length > 0 && (
+              {featuredIsMultiOption ? (
+                <div className="featured-panel__multi-preview">
+                  <div>
+                    <span>Options</span>
+                    <strong>{featuredMarket.optionCount.toString()}</strong>
+                  </div>
+                  <div>
+                    <span>Positions</span>
+                    <strong>{featuredMarket.positionCount.toLocaleString()}</strong>
+                  </div>
+                  <div>
+                    <span>Status</span>
+                    <strong>
+                      {featuredStatus
+                        ? marketDisplayStatusLabel(featuredStatus)
+                        : marketDisplayStatusLabel(featuredMarket.status)}
+                    </strong>
+                  </div>
+                </div>
+              ) : simulatedHistory.length > 0 && (
                 <AreaChart
                   data={simulatedHistory}
                   index="time"
@@ -293,6 +370,10 @@ export const MarketListPage = () => {
           <dd>{openCount}</dd>
         </div>
         <div>
+          <dt>Options</dt>
+          <dd>{totalOptions.toLocaleString()}</dd>
+        </div>
+        <div>
           <dt>Positions</dt>
           <dd>{totalPositions.toLocaleString()}</dd>
         </div>
@@ -341,8 +422,9 @@ export const MarketListPage = () => {
                 <MarketCard
                   market={m}
                   priceYes={m.priceYes}
-                  status={m.status}
-                  category={categoryForQuestion(m.question)}
+                  status={displayStatusForMarket(m, currentTime)}
+                  category={categoryForMarket(m)}
+                  optionCount={m.optionCount}
                   positionCount={m.positionCount}
                   volumeLabel={volumeLabelFor(m)}
                 />

@@ -20,7 +20,10 @@ type Props = {
   wallet?: LaceConnection;
 };
 
+const positionOptionId = (position: CocoaPosition): bigint => position.optionId ?? 0n;
+
 const positionId = (position: CocoaPosition): string =>
+  `${positionOptionId(position)}:` +
   Array.from(position.nonce, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 const readUnshieldedAddress = (value: unknown): string => {
@@ -44,11 +47,13 @@ const toLedgerUserAddress = (address: string, networkId: string): string => {
 };
 
 const payoutFor = (position: CocoaPosition, state: CocoaState): bigint | null => {
-  if (state.status !== Status.RESOLVED || state.outcome !== position.side) return null;
+  const optionId = positionOptionId(position);
+  const option = state.options.find((o) => o.optionId === optionId);
+  if (!option || option.status !== Status.RESOLVED || option.outcome !== position.side) return null;
   const winningStake =
-    state.outcome === Side.YES ? state.totalYesStake : state.totalNoStake;
+    option.outcome === Side.YES ? option.totalYesStake : option.totalNoStake;
   if (winningStake <= 0n) return null;
-  return (position.amount * state.volume) / winningStake;
+  return (position.amount * option.volume) / winningStake;
 };
 
 export const ClaimPanel = ({ api, state, wallet }: Props) => {
@@ -101,19 +106,16 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
     );
   }
 
-  const winnerSide = state.status === Status.RESOLVED ? state.outcome : null;
-
   return (
     <div className="claim-panel" data-testid="claim-panel">
       <h3>Your positions</h3>
       <ul className="claim-panel__list">
         {positions.map((p) => {
           const id = positionId(p);
-          const isWinner =
-            winnerSide !== null &&
-            ((winnerSide === Side.YES && p.side === Side.YES) ||
-              (winnerSide === Side.NO && p.side === Side.NO));
-          const canClaim = state.status === Status.RESOLVED && isWinner;
+          const optionId = positionOptionId(p);
+          const option = state.options.find((o) => o.optionId === optionId);
+          const isWinner = option?.status === Status.RESOLVED && option.outcome === p.side;
+          const canClaim = isWinner;
           const payout = payoutFor(p, state);
           return (
             <li
@@ -130,7 +132,7 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
                   Shielded
                 </span>
                 <span>
-                  {formatSide(p.side)} · {formatBigInt(p.amount)} NIGHT staked
+                  {formatSide(p.side)} on {option?.label ?? `Option ${optionId.toString()}`} · {formatBigInt(p.amount)} NIGHT staked
                   {payout !== null && (
                     <> · {formatBigInt(payout)} NIGHT payout</>
                   )}
@@ -146,7 +148,7 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
                 >
                   {loadingPositionId === id ? "Claiming..." : "Claim payout"}
                 </button>
-              ) : state.status === Status.RESOLVED ? (
+              ) : option?.status === Status.RESOLVED ? (
                 <span className="claim-panel__status">Lost</span>
               ) : (
                 <span className="claim-panel__status">Pending resolution</span>

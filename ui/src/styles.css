@@ -391,7 +391,7 @@ code {
 
 .market-list__stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 1px;
   margin: 0;
   overflow: hidden;
@@ -508,6 +508,12 @@ code {
   color: var(--secondary);
 }
 
+.market-card__status--betting-closed,
+.market-card__status--closed {
+  background: rgba(138, 143, 152, 0.12);
+  color: var(--muted);
+}
+
 .market-card__status--resolved {
   background: var(--border);
   color: var(--muted);
@@ -515,12 +521,18 @@ code {
 
 .market-card__question {
   min-height: 3.9rem;
-  margin: 0.75rem 0 1rem;
+  margin: 0.75rem 0 0.4rem;
   font-size: 17px;
   line-height: 1.33;
   font-weight: 590;
   letter-spacing: -0.011em;
   color: #ffffff;
+}
+
+.market-card__options-count {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 0.85rem;
 }
 
 .market-card__outcomes {
@@ -620,6 +632,64 @@ code {
   gap: 1rem;
 }
 
+.market-detail__options-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.market-detail__section-label {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 510;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.market-detail__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.5rem;
+}
+
+.market-detail__option {
+  min-height: 72px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.market-detail__option-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.market-detail__option-prices {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.market-detail__option--active {
+  border-color: var(--secondary);
+  box-shadow: 0 0 0 3px rgba(94, 106, 210, 0.15);
+}
+
 .market-detail__stats {
   margin: 0;
   display: grid;
@@ -692,6 +762,169 @@ code {
   font-size: 13px;
 }
 
+.option-line-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.option-line-chart svg {
+  width: 100%;
+  height: 220px;
+  display: block;
+}
+
+.option-line-chart__line {
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+
+.option-line-chart__point {
+  stroke: var(--surface-sunken);
+  stroke-width: 2;
+}
+
+.option-line-chart__grid {
+  stroke: rgba(220, 200, 180, 0.08);
+  stroke-width: 1;
+}
+
+.option-line-chart__axis {
+  fill: var(--faint);
+  font-size: 10px;
+  font-family: "Berkeley Mono", ui-monospace, monospace;
+}
+
+.option-line-chart__legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.option-line-chart__legend-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.option-line-chart__legend-item span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option-line-chart__legend-item strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.option-line-chart__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+}
+
+.market-detail__resolution {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--surface-2);
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.market-detail__resolution-source {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.market-detail__resolution-source strong {
+  color: var(--text);
+  font-weight: 510;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.market-detail__resolution-rules {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.market-detail__resolution-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.market-detail__resolution-options li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 10px 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.market-detail__resolution-options li > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.market-detail__resolution-options strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.market-detail__resolution-options span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.market-detail__resolution-badge {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.market-detail__resolution-badge--pending {
+  color: var(--muted);
+  background: rgba(138, 143, 152, 0.12);
+}
+
+.market-detail__resolution-badge--proposed {
+  color: var(--secondary);
+  background: rgba(94, 106, 210, 0.12);
+}
+
+.market-detail__resolution-badge--resolved {
+  color: var(--success);
+  background: rgba(77, 154, 95, 0.12);
+}
+
 /* bet form */
 .bet-form {
   background: var(--surface-2);
@@ -702,6 +935,30 @@ code {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.bet-form__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.bet-form--disabled .bet-form__side,
+.bet-form--disabled .bet-form__field input {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.bet-form__notice {
+  color: var(--muted);
+  background: rgba(138, 143, 152, 0.12);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 13px;
 }
 
 /* connect prompt */
@@ -734,12 +991,20 @@ code {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   cursor: pointer;
   font-weight: 510;
   font-size: 13px;
   background: var(--surface-2);
   transition: border-color 120ms, background 120ms;
+}
+
+.bet-form__side strong,
+.bet-form__side span {
+  pointer-events: none;
 }
 
 .bet-form__side input {
@@ -946,7 +1211,8 @@ code {
 }
 
 .create-market__field input,
-.create-market__field textarea {
+.create-market__field textarea,
+.create-market__field select {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -958,6 +1224,11 @@ code {
   transition: all 150ms;
 }
 
+.create-market__field select {
+  appearance: none;
+  cursor: pointer;
+}
+
 .create-market__field textarea {
   resize: vertical;
   min-height: 120px;
@@ -965,11 +1236,36 @@ code {
 }
 
 .create-market__field input:focus,
-.create-market__field textarea:focus {
+.create-market__field textarea:focus,
+.create-market__field select:focus {
   background: var(--surface-2);
   border-color: var(--secondary);
   box-shadow: 0 0 0 3px rgba(94, 106, 210, 0.15);
   outline: none;
+}
+
+.create-market__type {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.create-market__type-option {
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 510;
+  cursor: pointer;
+}
+
+.create-market__type-option--active {
+  border-color: var(--secondary);
+  background: rgba(94, 106, 210, 0.12);
+  box-shadow: 0 0 0 3px rgba(94, 106, 210, 0.12);
 }
 
 .create-market__error {
@@ -1027,6 +1323,34 @@ code {
   gap: 0.5rem;
 }
 
+.oracle-panel__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.oracle-panel__option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.oracle-panel__option-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.oracle-panel__option-header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .oracle-panel__buttons,
 .factory-admin__actions {
   display: flex;
@@ -1082,6 +1406,11 @@ code {
 }
 
 .oracle-status-badge--awaiting {
+  color: var(--warning);
+  background: rgba(240, 160, 48, 0.12);
+}
+
+.oracle-status-badge--awaiting_proposal {
   color: var(--warning);
   background: rgba(240, 160, 48, 0.12);
 }
@@ -1185,6 +1514,12 @@ code {
   letter-spacing: 0.02em;
 }
 
+.featured-panel__live-badge--betting-closed,
+.featured-panel__live-badge--closed,
+.featured-panel__live-badge--resolved {
+  color: var(--muted);
+}
+
 .featured-panel__live-dot {
   width: 6px;
   height: 6px;
@@ -1229,6 +1564,37 @@ code {
 .featured-panel__bet-pills {
   display: flex;
   gap: 12px;
+}
+
+.featured-panel__option-summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.featured-panel__option-summary span {
+  color: var(--muted);
+}
+
+.featured-panel__option-summary strong {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.featured-panel__option-summary:hover {
+  border-color: rgba(228, 242, 34, 0.25);
+  background: rgba(228, 242, 34, 0.05);
+  text-decoration: none;
 }
 
 .btn--yes-pill,
@@ -1280,6 +1646,40 @@ code {
   border-radius: 0;
   border: 1px solid var(--border-subtle);
   padding: 16px;
+}
+
+.featured-panel__multi-preview {
+  width: 100%;
+  min-height: 160px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--border-subtle);
+}
+
+.featured-panel__multi-preview div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 16px;
+  background: var(--surface-2);
+}
+
+.featured-panel__multi-preview span {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 510;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.featured-panel__multi-preview strong {
+  color: var(--text);
+  font-size: 22px;
 }
 
 @keyframes pulse {
