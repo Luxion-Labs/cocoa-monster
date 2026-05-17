@@ -35,8 +35,8 @@ The UI is served at `http://localhost:5173`.
 
 ## Oracle and Market Discovery
 
-- Open `/oracle` to deploy or inspect the shared `MarketFactory`.
-- After deploying a factory, set `VITE_MARKET_FACTORY_ADDRESS` in browser runtime config for shared deployments, or paste its address into `/oracle` for a browser-local override.
+- Open `/oracle` to inspect the shared `MarketFactory`.
+- After deploying a factory with the headless deployer, set `VITE_MARKET_FACTORY_ADDRESS` in browser runtime config for shared deployments, or paste its address into `/oracle` for a browser-local override.
 - The home page reads that factory first, so every teammate sees the same markets.
 - Oracle proposal, dispute, and finalization are contract operations handled from `/oracle/<market-address>`.
 

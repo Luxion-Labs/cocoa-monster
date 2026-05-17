@@ -1,5 +1,4 @@
 import {
-  deployMarketFactory,
   joinMarketFactory,
   type RegisteredMarket,
 } from "cocoa-contract";
@@ -21,7 +20,6 @@ export const FactoryAdminPage = () => {
     getMarketFactoryAddress() ?? "",
   );
   const [markets, setMarkets] = useState<readonly RegisteredMarket[]>([]);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const providers = useMemo(
     () => (wallet.connection ? buildCocoaProviders(wallet.connection) : null),
@@ -43,22 +41,6 @@ export const FactoryAdminPage = () => {
     void refresh();
   }, [refresh]);
 
-  const deploy = async (): Promise<void> => {
-    if (!wallet.connection) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const factory = await deployMarketFactory(providers! as never);
-      setFactoryAddress(factory.contractAddress);
-      setMarketFactoryAddress(factory.contractAddress);
-      setMarkets([]);
-    } catch (err) {
-      setError(explainError(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <section className="page factory-admin">
       <header className="page__header">
@@ -70,15 +52,15 @@ export const FactoryAdminPage = () => {
 
       {!wallet.connection ? (
         <div className="empty-state">
-          <p>Connect wallet to deploy or inspect the market factory.</p>
+          <p>Connect wallet to inspect the market factory.</p>
         </div>
       ) : (
         <div className="factory-admin__panel">
           <div className="factory-admin__intro">
             <h3>Market registry</h3>
             <p>
-              Deploy one factory, configure its address in every UI, and all
-              markets created through Cocoa will be discoverable by everyone.
+              Paste a factory address to inspect registered markets and open
+              their oracle panels.
             </p>
           </div>
           <label className="create-market__field">
@@ -90,18 +72,10 @@ export const FactoryAdminPage = () => {
                 setFactoryAddress(event.target.value);
                 setMarketFactoryAddress(event.target.value);
               }}
-              placeholder="Deploy one, then paste its address here"
+              placeholder="Paste a factory address"
             />
           </label>
           <div className="factory-admin__actions">
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => void deploy()}
-              disabled={submitting}
-            >
-              {submitting ? "Deploying..." : "Deploy factory"}
-            </button>
             <button
               type="button"
               className="btn btn--ghost"
