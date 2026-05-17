@@ -1899,3 +1899,187 @@ code {
     box-shadow: 0 0 0 0 rgba(77, 154, 95, 0);
   }
 }
+
+/* market discussion (IPFS comments) */
+.discussion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.discussion__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.discussion__refresh {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.discussion__notice {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+.discussion__notice code {
+  font-family: "Berkeley Mono", ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.discussion__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.discussion__empty {
+  margin: 0;
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--faint);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.comment {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.comment--pending {
+  opacity: 0.6;
+}
+
+.comment__avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.comment__main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.comment__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.comment__handle {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.comment__fp {
+  font-family: "Berkeley Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.comment__time {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.comment__body {
+  margin: 0;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.comment__image {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.comment__file {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.comment__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.comment__action {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.comment__action:hover {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.discussion__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.discussion__textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+}
+
+.discussion__textarea:focus {
+  outline: none;
+  border-color: var(--muted);
+}
+
+.discussion__composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.discussion__count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+}

@@ -54,6 +54,18 @@ Required to deploy a missing factory:
 
 `VITE_NETWORK_ID` is required and selects a preset from `midnight-networks.json` (`preprod`, `preview`, or `mainnet`). The factory env defaults to `local`, and the default state path is `.cocoa/factory-${COCOA_FACTORY_ENV}.json`.
 
+## Market Discussion (IPFS / Pinata)
+
+Each market has a comment thread stored entirely on IPFS via [Pinata](https://pinata.cloud). There is no backend: a comment is a small signed JSON document pinned to Pinata and tagged with the market address; image attachments are a second pin the comment references by CID. The thread is rebuilt client-side by listing pins for the market, fetching each document through the gateway, and keeping only those whose signature verifies.
+
+Set the following runtime config (see `.env.example`) to enable it; omit `VITE_PINATA_JWT` to hide the discussion panel:
+
+- `VITE_PINATA_JWT` — Pinata JWT, scoped to pinning. Embedded client-side, so it is extractable; comment authenticity comes from per-comment signatures, not from trusting this key.
+- `VITE_PINATA_GATEWAY` — optional dedicated gateway host (defaults to the public Pinata gateway).
+- `VITE_PINATA_GATEWAY_KEY` — optional access token for a restricted gateway.
+
+Comment identity is a device-local P-256 keypair, deliberately separate from the Midnight shielded wallet address so public comments do not deanonymize private positions. Known limitations: the embedded key allows quota abuse (a serverless token-minter is the production fix), IPFS content cannot be truly deleted (removal only unpins from this account), and the thread is poll-based rather than realtime.
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
