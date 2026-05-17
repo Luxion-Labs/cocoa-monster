@@ -34,6 +34,7 @@ midnight-level-db/
 .overmind.sock
 .playwright-mcp/
 oracle/data/
+.cocoa/
 
 # Cypress artifacts
 cypress/screenshots/
