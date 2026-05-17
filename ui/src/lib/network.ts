@@ -4,6 +4,7 @@ import {
 } from "@midnight-ntwrk/midnight-js-network-id";
 
 import midnightNetworks from "../../../midnight-networks.json";
+import { getRuntimeConfig } from "./runtime-config";
 
 export type CocoaConfig = {
   /** Midnight network identifier. */
@@ -22,19 +23,6 @@ export type CocoaConfig = {
   readonly zkConfigBaseUri: string;
 };
 
-type RuntimeConfig = {
-  readonly VITE_NETWORK_ID?: string;
-};
-
-declare global {
-  interface Window {
-    __COCOA_MONSTER_CONFIG__?: RuntimeConfig;
-  }
-}
-
-const runtimeConfig = (): RuntimeConfig =>
-  typeof window === "undefined" ? {} : (window.__COCOA_MONSTER_CONFIG__ ?? {});
-
 const appOrigin = (): string =>
   typeof window === "undefined" ? "http://localhost:5173" : window.location.origin;
 
@@ -47,7 +35,7 @@ const isConfiguredNetworkId = (value: string): value is ConfiguredNetworkId =>
 
 const configuredNetworkId = (): ConfiguredNetworkId => {
   const value =
-    runtimeConfig().VITE_NETWORK_ID ??
+    getRuntimeConfig().VITE_NETWORK_ID ??
     (import.meta.env.DEV ? import.meta.env.VITE_NETWORK_ID : undefined);
   if (!value) {
     throw new Error(

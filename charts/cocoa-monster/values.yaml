@@ -42,6 +42,8 @@ runtimeConfig:
   enabled: true
   # VITE_NETWORK_ID selects defaults from midnight-networks.json.
   # Supported values: preprod, preview, mainnet.
+  # VITE_MARKET_FACTORY_ADDRESS can be set per environment to share
+  # one factory-backed market registry across all browsers.
   values:
     VITE_NETWORK_ID: preview
 

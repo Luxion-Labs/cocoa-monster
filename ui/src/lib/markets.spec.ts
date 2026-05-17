@@ -11,9 +11,11 @@ import {
 describe("markets address book", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    delete window.__COCOA_MONSTER_CONFIG__;
   });
   afterEach(() => {
     window.localStorage.clear();
+    delete window.__COCOA_MONSTER_CONFIG__;
   });
 
   it("returns an empty list when nothing is stored", () => {
@@ -80,5 +82,16 @@ describe("markets address book", () => {
 
     setMarketFactoryAddress(null);
     expect(getMarketFactoryAddress()).toBeNull();
+  });
+
+  it("uses the runtime-configured market factory address by default", () => {
+    window.__COCOA_MONSTER_CONFIG__ = {
+      VITE_MARKET_FACTORY_ADDRESS: "  0xconfigured  ",
+    };
+
+    expect(getMarketFactoryAddress()).toBe("0xconfigured");
+
+    setMarketFactoryAddress("0xlocal");
+    expect(getMarketFactoryAddress()).toBe("0xlocal");
   });
 });

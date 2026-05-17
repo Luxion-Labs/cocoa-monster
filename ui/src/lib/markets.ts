@@ -5,6 +5,8 @@
  * across page loads.
  */
 
+import { getRuntimeConfig } from "./runtime-config";
+
 const STORAGE_KEY = "cocoa.knownMarkets";
 const FACTORY_STORAGE_KEY = "cocoa.marketFactoryAddress";
 
@@ -68,7 +70,10 @@ export const forgetMarket = (contractAddress: string): KnownMarket[] => {
 export const getMarketFactoryAddress = (): string | null => {
   const storage = safeStorage();
   const value = storage?.getItem(FACTORY_STORAGE_KEY)?.trim();
-  return value || null;
+  if (value) return value;
+
+  const configuredValue = getRuntimeConfig().VITE_MARKET_FACTORY_ADDRESS?.trim();
+  return configuredValue || null;
 };
 
 export const setMarketFactoryAddress = (contractAddress: string | null): void => {
