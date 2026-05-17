@@ -136,7 +136,9 @@ export const BetForm = ({ api, state, wallet }: Props) => {
       <button
         type="submit"
         disabled={disabled}
-        className="btn btn--primary bet-form__submit"
+        className={`bet-form__submit ${
+          side === Side.YES ? "bet-form__submit--yes" : "bet-form__submit--no"
+        }`}
         data-testid="bet-form-submit"
       >
         {submitting ? "Submitting…" : `Bet ${side === Side.YES ? "YES" : "NO"}`}

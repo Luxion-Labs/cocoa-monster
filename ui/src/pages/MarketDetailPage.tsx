@@ -99,9 +99,37 @@ export const MarketDetailPage = () => {
         {address && (
           <Link
             to={`/oracle/${encodeURIComponent(address)}`}
-            className="btn btn--ghost"
+            className="btn btn--secondary"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              height: "38px",
+              borderRadius: "6px",
+              background: "rgba(228, 242, 34, 0.05)",
+              borderColor: "rgba(228, 242, 34, 0.2)",
+              color: "#e4f222",
+              fontWeight: 510,
+              boxShadow: "0 2px 8px rgba(228, 242, 34, 0.05)",
+              transition: "all 150ms ease",
+            }}
           >
-            Oracle
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ flexShrink: 0 }}
+            >
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Oracle Panel
           </Link>
         )}
       </header>
