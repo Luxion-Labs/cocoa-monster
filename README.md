@@ -52,10 +52,8 @@ Required to deploy a missing factory:
 
 - `COCOA_FACTORY_ENV`, for example `local`, `staging`, or `prod`.
 - `COCOA_FACTORY_MNEMONIC`, a BIP-39 English seed phrase. `COCOA_FACTORY_SEED_HEX` is also supported for generated CI wallets.
-- `COCOA_FACTORY_PRIVATE_STATE_PASSWORD`, at least 16 characters.
-- `COCOA_RELAY_URL`, the Midnight node websocket URL used for submission.
 
-Optional network overrides mirror the UI: `VITE_NETWORK_ID`, `VITE_INDEXER_URI`, `VITE_INDEXER_WS_URI`, and `VITE_PROOF_SERVER_URI`. `COCOA_FACTORY_MNEMONIC_PASSPHRASE` can be set when the wallet uses a BIP-39 passphrase. The default state path is `.cocoa/factory-${COCOA_FACTORY_ENV}.json`.
+Optional network overrides mirror the UI: `VITE_NETWORK_ID`, `VITE_INDEXER_URI`, `VITE_INDEXER_WS_URI`, and `VITE_PROOF_SERVER_URI`. `COCOA_RELAY_URL` defaults to the preprod relay when `VITE_NETWORK_ID=preprod`. `COCOA_FACTORY_PRIVATE_STATE_PASSWORD` only encrypts the deployer's local private-state database and has a CI-safe default. `COCOA_FACTORY_MNEMONIC_PASSPHRASE` can be set when the wallet uses a BIP-39 passphrase. The default state path is `.cocoa/factory-${COCOA_FACTORY_ENV}.json`.
 
 ## License
 

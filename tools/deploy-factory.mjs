@@ -104,6 +104,11 @@ const resolveSeedBytes = () => {
   );
 };
 
+const defaultRelayUrl = (networkId) => {
+  if (networkId === "preprod") return "wss://rpc.preprod.midnight.network";
+  throw new Error("COCOA_RELAY_URL is required for non-preprod networks");
+};
+
 const loadState = async (stateFile) => {
   try {
     return JSON.parse(await readFile(stateFile, "utf8"));
@@ -257,7 +262,7 @@ const main = async () => {
     "VITE_INDEXER_WS_URI",
     "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
   );
-  const relayUrl = requiredEnv("COCOA_RELAY_URL");
+  const relayUrl = env("COCOA_RELAY_URL", defaultRelayUrl(networkId));
   const proofServerUri = env(
     "VITE_PROOF_SERVER_URI",
     "https://proof-server.preprod.midnight.network",
@@ -265,7 +270,10 @@ const main = async () => {
   const privateStateDir = path.resolve(
     env("COCOA_FACTORY_PRIVATE_STATE_DIR", `.cocoa/private-state-${environment}`),
   );
-  const privateStatePassword = requiredEnv("COCOA_FACTORY_PRIVATE_STATE_PASSWORD");
+  const privateStatePassword = env(
+    "COCOA_FACTORY_PRIVATE_STATE_PASSWORD",
+    `cocoa-monster-${environment}-factory-private-state`,
+  );
   const accountIndex = Number.parseInt(env("COCOA_FACTORY_ACCOUNT_INDEX", "0"), 10);
   if (!Number.isSafeInteger(accountIndex) || accountIndex < 0) {
     throw new Error("COCOA_FACTORY_ACCOUNT_INDEX must be a non-negative integer");
