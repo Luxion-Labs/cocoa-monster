@@ -42,7 +42,7 @@ The UI is served at `http://localhost:5173`.
 
 ## Factory Deployment
 
-Each environment should use its own `MarketFactory` contract. The headless deployer is idempotent: if an address is set in `COCOA_FACTORY_ADDRESS`, `VITE_MARKET_FACTORY_ADDRESS`, or the env state file, it prints that address and does not submit a transaction. If no address exists, it derives a CI wallet from `COCOA_FACTORY_SEED_HEX`, deploys the factory, and writes the resulting address to state.
+Each environment should use its own `MarketFactory` contract. The headless deployer is idempotent: if an address is set in `COCOA_FACTORY_ADDRESS`, `VITE_MARKET_FACTORY_ADDRESS`, or the env state file, it prints that address and does not submit a transaction. If no address exists, it derives a CI wallet from `COCOA_FACTORY_MNEMONIC` or `COCOA_FACTORY_SEED_HEX`, deploys the factory, and writes the resulting address to state.
 
 ```sh
 npm run deploy:factory
@@ -51,11 +51,11 @@ npm run deploy:factory
 Required to deploy a missing factory:
 
 - `COCOA_FACTORY_ENV`, for example `local`, `staging`, or `prod`.
-- `COCOA_FACTORY_SEED_HEX`, a hex-encoded HD wallet seed.
+- `COCOA_FACTORY_MNEMONIC`, a BIP-39 English seed phrase. `COCOA_FACTORY_SEED_HEX` is also supported for generated CI wallets.
 - `COCOA_FACTORY_PRIVATE_STATE_PASSWORD`, at least 16 characters.
 - `COCOA_RELAY_URL`, the Midnight node websocket URL used for submission.
 
-Optional network overrides mirror the UI: `VITE_NETWORK_ID`, `VITE_INDEXER_URI`, `VITE_INDEXER_WS_URI`, and `VITE_PROOF_SERVER_URI`. The default state path is `.cocoa/factory-${COCOA_FACTORY_ENV}.json`.
+Optional network overrides mirror the UI: `VITE_NETWORK_ID`, `VITE_INDEXER_URI`, `VITE_INDEXER_WS_URI`, and `VITE_PROOF_SERVER_URI`. `COCOA_FACTORY_MNEMONIC_PASSPHRASE` can be set when the wallet uses a BIP-39 passphrase. The default state path is `.cocoa/factory-${COCOA_FACTORY_ENV}.json`.
 
 ## License
 

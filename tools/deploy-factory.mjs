@@ -3,6 +3,8 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
+import { wordlist as englishWordlist } from "@scure/bip39/wordlists/english.js";
 import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
 import { levelPrivateStateProvider } from "@midnight-ntwrk/midnight-js-level-private-state-provider";
@@ -81,6 +83,27 @@ const bytesFromHex = (value, label) => {
   return bytes;
 };
 
+const normalizeMnemonic = (value) => value.trim().toLowerCase().replace(/\s+/g, " ");
+
+const resolveSeedBytes = () => {
+  const mnemonic = process.env.COCOA_FACTORY_MNEMONIC;
+  if (mnemonic) {
+    const normalized = normalizeMnemonic(mnemonic);
+    if (!validateMnemonic(normalized, englishWordlist)) {
+      throw new Error("COCOA_FACTORY_MNEMONIC is not a valid BIP-39 English mnemonic");
+    }
+    return mnemonicToSeedSync(
+      normalized,
+      env("COCOA_FACTORY_MNEMONIC_PASSPHRASE", ""),
+    );
+  }
+
+  return bytesFromHex(
+    requiredEnv("COCOA_FACTORY_SEED_HEX"),
+    "COCOA_FACTORY_SEED_HEX",
+  );
+};
+
 const loadState = async (stateFile) => {
   try {
     return JSON.parse(await readFile(stateFile, "utf8"));
@@ -95,10 +118,8 @@ const writeState = async (stateFile, state) => {
   await writeFile(stateFile, `${JSON.stringify(state, null, 2)}\n`);
 };
 
-const deriveKeys = (seedHex, accountIndex) => {
-  const walletResult = HDWallet.fromSeed(
-    bytesFromHex(seedHex, "COCOA_FACTORY_SEED_HEX"),
-  );
+const deriveKeys = (seedBytes, accountIndex) => {
+  const walletResult = HDWallet.fromSeed(seedBytes);
   if (walletResult.type !== "seedOk") {
     throw new Error(`failed to derive HD wallet: ${String(walletResult.error)}`);
   }
@@ -253,7 +274,7 @@ const main = async () => {
   setNetworkId(networkId);
   process.stderr.write(`deploying cocoa factory for ${environment} on ${networkId}\n`);
 
-  const keys = deriveKeys(requiredEnv("COCOA_FACTORY_SEED_HEX"), accountIndex);
+  const keys = deriveKeys(resolveSeedBytes(), accountIndex);
   const { facade, providers, accountId } = await buildWalletFacade({
     networkId,
     indexerUri,
