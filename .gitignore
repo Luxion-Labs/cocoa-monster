@@ -5,8 +5,13 @@ dist/
 *.log
 .vite/
 
-# Compact build output
-managed/
+# Compact / Midnight generated artifacts
+**/managed/
+**/zkir/
+*.zkir
+*.bzkir
+*.prover
+*.verifier
 
 # UI's copy of the compiled ZK artifacts (synced from contract/src/managed/)
 ui/public/keys/
