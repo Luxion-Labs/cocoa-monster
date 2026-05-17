@@ -10,8 +10,7 @@ import {
   ledger as readLedger,
   readMarketFactoryLedger,
 } from "cocoa-contract";
-import type { KnownMarket } from "./markets";
-import { readJsonResponse } from "./http";
+import { getMarketFactoryAddress, type KnownMarket } from "./markets";
 import { cocoaConfig } from "./network";
 
 const getProvider = () => 
@@ -24,48 +23,13 @@ export type DiscoveredMarket = KnownMarket & {
   readonly nullifierCount: bigint;
 };
 
-const isKnownMarket = (value: unknown): value is KnownMarket => {
-  if (typeof value !== "object" || value === null) return false;
-  const m = value as Partial<KnownMarket>;
-  return (
-    typeof m.contractAddress === "string" &&
-    typeof m.question === "string" &&
-    (m.addedAt === undefined || typeof m.addedAt === "number")
-  );
-};
-
-export const fetchRegistryMarkets = async (): Promise<KnownMarket[]> => {
-  const registryUrl = import.meta.env.VITE_MARKET_REGISTRY_URL as
-    | string
-    | undefined;
-  if (!registryUrl) return [];
-
-  const response = await fetch(registryUrl, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`registry returned ${response.status}`);
-  }
-
-  const payload = await readJsonResponse<{ markets?: unknown } | unknown[]>(
-    response,
-    {},
-  );
-  const rows = Array.isArray(payload) ? payload : payload.markets;
-  if (!Array.isArray(rows)) return [];
-
-  const now = Date.now();
-  return rows.filter(isKnownMarket).map((market) => ({
-    contractAddress: market.contractAddress,
-    question: market.question,
-    addedAt: market.addedAt ?? now,
-  }));
-};
-
 export const fetchFactoryMarkets = async (): Promise<KnownMarket[]> => {
-  if (!cocoaConfig.marketFactoryAddress) return [];
+  const marketFactoryAddress = getMarketFactoryAddress();
+  if (!marketFactoryAddress) return [];
 
   try {
     const provider = getProvider();
-    const state = await provider.queryContractState(cocoaConfig.marketFactoryAddress as never);
+    const state = await provider.queryContractState(marketFactoryAddress as never);
     if (!state) {
       console.warn("[discovery] Factory contract state not found");
       return [];
@@ -91,25 +55,7 @@ export const fetchFactoryMarkets = async (): Promise<KnownMarket[]> => {
 };
 
 export const fetchSharedMarkets = async (): Promise<KnownMarket[]> => {
-  const [factory, registry] = await Promise.allSettled([
-    fetchFactoryMarkets(),
-    fetchRegistryMarkets(),
-  ]);
-  const markets: KnownMarket[] = [];
-
-  if (factory.status === "fulfilled") {
-    markets.push(...factory.value);
-  } else {
-    console.warn("[discovery] Factory registry refresh failed:", factory.reason);
-  }
-
-  if (registry.status === "fulfilled") {
-    markets.push(...registry.value);
-  } else {
-    console.warn("[discovery] Registry refresh failed:", registry.reason);
-  }
-
-  return markets;
+  return fetchFactoryMarkets();
 };
 
 /**

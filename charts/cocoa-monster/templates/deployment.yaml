@@ -30,10 +30,6 @@ spec:
             - name: http
               containerPort: 80
               protocol: TCP
-          {{- with .Values.env }}
-          env:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
           {{- if .Values.runtimeConfig.enabled }}
           volumeMounts:
             - name: runtime-config

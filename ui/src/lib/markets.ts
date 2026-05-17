@@ -6,6 +6,7 @@
  */
 
 const STORAGE_KEY = "cocoa.knownMarkets";
+const FACTORY_STORAGE_KEY = "cocoa.marketFactoryAddress";
 
 export type KnownMarket = {
   readonly contractAddress: string;
@@ -62,4 +63,21 @@ export const forgetMarket = (contractAddress: string): KnownMarket[] => {
   );
   if (storage) storage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
+};
+
+export const getMarketFactoryAddress = (): string | null => {
+  const storage = safeStorage();
+  const value = storage?.getItem(FACTORY_STORAGE_KEY)?.trim();
+  return value || null;
+};
+
+export const setMarketFactoryAddress = (contractAddress: string | null): void => {
+  const storage = safeStorage();
+  if (!storage) return;
+  const value = contractAddress?.trim();
+  if (value) {
+    storage.setItem(FACTORY_STORAGE_KEY, value);
+  } else {
+    storage.removeItem(FACTORY_STORAGE_KEY);
+  }
 };

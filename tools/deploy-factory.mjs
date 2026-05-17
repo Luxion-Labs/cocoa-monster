@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { inspect } from "node:util";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +34,9 @@ import {
 import { deployMarketFactory } from "../contract/dist/factory.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const midnightNetworks = require("../midnight-networks.json");
+const configuredNetworkIds = Object.keys(midnightNetworks);
 
 class FileZkConfigProvider extends ZKConfigProvider {
   constructor(baseDir) {
@@ -148,9 +152,14 @@ const resolveSeedBytes = () => {
   );
 };
 
-const defaultRelayUrl = (networkId) => {
-  if (networkId === "preprod") return "https://rpc.preprod.midnight.network";
-  throw new Error("COCOA_RELAY_URL is required for non-preprod networks");
+const resolveNetworkConfig = (networkId) => {
+  if (Object.hasOwn(midnightNetworks, networkId)) {
+    return midnightNetworks[networkId];
+  }
+
+  throw new Error(
+    `Unsupported VITE_NETWORK_ID ${JSON.stringify(networkId)}. Expected one of: ${configuredNetworkIds.join(", ")}`,
+  );
 };
 
 const loadState = async (stateFile) => {
@@ -314,7 +323,6 @@ const main = async () => {
   const state = await loadState(stateFile);
   const existingAddress =
     process.env.COCOA_FACTORY_ADDRESS ||
-    process.env.VITE_MARKET_FACTORY_ADDRESS ||
     state.contractAddress;
 
   if (existingAddress) {
@@ -325,20 +333,12 @@ const main = async () => {
     return;
   }
 
-  const networkId = env("VITE_NETWORK_ID", "preprod");
-  const indexerUri = env(
-    "VITE_INDEXER_URI",
-    "https://indexer.preprod.midnight.network/api/v4/graphql",
-  );
-  const indexerWsUri = env(
-    "VITE_INDEXER_WS_URI",
-    "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
-  );
-  const relayUrl = env("COCOA_RELAY_URL", defaultRelayUrl(networkId));
-  const proofServerUri = env(
-    "VITE_PROOF_SERVER_URI",
-    "https://proof-server.preprod.midnight.network",
-  );
+  const networkId = requiredEnv("VITE_NETWORK_ID");
+  const networkConfig = resolveNetworkConfig(networkId);
+  const indexerUri = networkConfig.indexerUri;
+  const indexerWsUri = networkConfig.indexerWsUri;
+  const relayUrl = networkConfig.relayUrl;
+  const proofServerUri = networkConfig.proofServerUri;
   const privateStateDir = path.resolve(
     env("COCOA_FACTORY_PRIVATE_STATE_DIR", `.cocoa/private-state-${environment}`),
   );

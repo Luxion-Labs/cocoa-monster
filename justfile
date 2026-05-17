@@ -21,8 +21,29 @@ compact:
 
 # Compile the contract, then start proof and UI services.
 dev: install compact
-    overmind start
+    @if [ -S .overmind.sock ]; then \
+        if overmind status >/dev/null 2>&1; then \
+            echo "overmind is already running"; \
+            overmind status; \
+            exit 0; \
+        fi; \
+        echo "removing stale .overmind.sock"; \
+        rm -f .overmind.sock; \
+    fi; \
+    env -u VITE_MARKET_FACTORY_ADDRESS -u VITE_MARKET_REGISTRY_URL -u VITE_INDEXER_URI -u VITE_INDEXER_WS_URI -u VITE_PROOF_SERVER_URI -u VITE_ZK_CONFIG_URI VITE_NETWORK_ID=preview overmind start --daemonize
+
+down:
+    @if [ -S .overmind.sock ]; then \
+        if overmind status >/dev/null 2>&1; then \
+            overmind quit; \
+        else \
+            echo "removing stale .overmind.sock"; \
+            rm -f .overmind.sock; \
+        fi; \
+    fi
+    @docker compose down --remove-orphans
+    @rm -f .overmind.sock
 
 test: compact
     cd contract && npm test
-    cd ui && npm test
+    env -u VITE_MARKET_FACTORY_ADDRESS -u VITE_MARKET_REGISTRY_URL -u VITE_INDEXER_URI -u VITE_INDEXER_WS_URI -u VITE_PROOF_SERVER_URI -u VITE_ZK_CONFIG_URI VITE_NETWORK_ID=preview npm --workspace ui test

@@ -7,9 +7,8 @@ import { useNavigate } from "react-router-dom";
 
 import { useWallet } from "../hooks/useWallet";
 import { buildCocoaProviders } from "../lib/providers";
-import { rememberMarket } from "../lib/markets";
+import { getMarketFactoryAddress, rememberMarket } from "../lib/markets";
 import { explainError } from "../lib/errors";
-import { cocoaConfig } from "../lib/network";
 
 const DEFAULT_LIQUIDITY = "1000";
 
@@ -86,10 +85,11 @@ export const CreateMarketPage = () => {
         closeTime: closeTimestamp!,
       });
       console.debug("[cocoa] deployed at", api.contractAddress);
-      if (cocoaConfig.marketFactoryAddress) {
+      const marketFactoryAddress = getMarketFactoryAddress();
+      if (marketFactoryAddress) {
         const factory = await joinMarketFactory(
           providers as never,
-          cocoaConfig.marketFactoryAddress,
+          marketFactoryAddress,
         );
         await factory.registerMarket({
           contractAddress: api.contractAddress,

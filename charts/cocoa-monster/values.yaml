@@ -35,18 +35,15 @@ ingress:
   host: ""
   annotations: {}
 
-# Runtime browser config rendered as /env.js. Vite also supports these
-# as build-time variables for local/dev builds, but Kubernetes deploys
-# serve a prebuilt static bundle, so chart-controlled values must be
-# loaded by the browser at runtime.
+# Runtime browser config rendered as /env.js. Kubernetes deploys serve
+# a prebuilt static bundle, so VITE_NETWORK_ID must be loaded by the
+# browser at runtime.
 runtimeConfig:
   enabled: true
-  values: {}
-
-# Extra envs forwarded to the nginx container. These are process envs
-# only; they are not visible to the already-built Vite bundle unless
-# also represented under `runtimeConfig.values`.
-env: []
+  # VITE_NETWORK_ID selects defaults from midnight-networks.json.
+  # Supported values: preprod, preview, mainnet.
+  values:
+    VITE_NETWORK_ID: preview
 
 resources: {}
 
@@ -54,13 +51,11 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# Self-hosted proof-server. Off by default — Midnight Foundation's
-# public preprod proof-server (https://proof-server.preprod.midnight.
-# network) now returns CORS headers for arbitrary browser origins and
-# runs an unpublished 8.x build matching ledger-v8's wire format, so
-# the dapp talks to it directly (see ui/src/lib/network.ts). Templates
-# stay around in case we ever need to self-host again (e.g. for a
-# private network); flip this on and set `proofServer.ingress.host`.
+# Self-hosted proof-server. Off by default because the browser config
+# can point at the selected Midnight network's public proof-server
+# preset (see ui/src/lib/network.ts and midnight-networks.json).
+# Templates stay around in case we ever need to self-host again (e.g.
+# for a private network); flip this on and set `proofServer.ingress.host`.
 proofServer:
   enabled: false
   replicaCount: 1

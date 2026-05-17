@@ -1,0 +1,23 @@
+{
+  "preprod": {
+    "networkId": "preprod",
+    "indexerUri": "https://indexer.preprod.midnight.network/api/v4/graphql",
+    "indexerWsUri": "wss://indexer.preprod.midnight.network/api/v4/graphql/ws",
+    "proofServerUri": "https://proof-server.preprod.midnight.network",
+    "relayUrl": "https://rpc.preprod.midnight.network"
+  },
+  "preview": {
+    "networkId": "preview",
+    "indexerUri": "https://indexer.preview.midnight.network/api/v4/graphql",
+    "indexerWsUri": "wss://indexer.preview.midnight.network/api/v4/graphql/ws",
+    "proofServerUri": "https://proof-server.preview.midnight.network",
+    "relayUrl": "https://rpc.preview.midnight.network"
+  },
+  "mainnet": {
+    "networkId": "mainnet",
+    "indexerUri": "https://indexer.mainnet.midnight.network/api/v4/graphql",
+    "indexerWsUri": "wss://indexer.mainnet.midnight.network/api/v4/graphql/ws",
+    "proofServerUri": "https://lace-proof-pub.mainnet.midnight.network",
+    "relayUrl": "https://rpc.mainnet.midnight.network"
+  }
+}

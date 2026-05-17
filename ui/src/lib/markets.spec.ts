@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { forgetMarket, listKnownMarkets, rememberMarket } from "./markets";
+import {
+  forgetMarket,
+  getMarketFactoryAddress,
+  listKnownMarkets,
+  rememberMarket,
+  setMarketFactoryAddress,
+} from "./markets";
 
 describe("markets address book", () => {
   beforeEach(() => {
@@ -64,5 +70,15 @@ describe("markets address book", () => {
     );
     expect(listKnownMarkets()).toHaveLength(1);
     expect(listKnownMarkets()[0].contractAddress).toBe("0xa");
+  });
+
+  it("stores and clears the market factory address", () => {
+    expect(getMarketFactoryAddress()).toBeNull();
+
+    setMarketFactoryAddress("  0xfactory  ");
+    expect(getMarketFactoryAddress()).toBe("0xfactory");
+
+    setMarketFactoryAddress(null);
+    expect(getMarketFactoryAddress()).toBeNull();
   });
 });

@@ -9,13 +9,16 @@ import { Link } from "react-router-dom";
 import { useWallet } from "../hooks/useWallet";
 import { explainError } from "../lib/errors";
 import { truncateAddress } from "../lib/format";
-import { cocoaConfig } from "../lib/network";
+import {
+  getMarketFactoryAddress,
+  setMarketFactoryAddress,
+} from "../lib/markets";
 import { buildCocoaProviders } from "../lib/providers";
 
 export const FactoryAdminPage = () => {
   const wallet = useWallet();
   const [factoryAddress, setFactoryAddress] = useState(
-    cocoaConfig.marketFactoryAddress ?? "",
+    getMarketFactoryAddress() ?? "",
   );
   const [markets, setMarkets] = useState<readonly RegisteredMarket[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +50,7 @@ export const FactoryAdminPage = () => {
     try {
       const factory = await deployMarketFactory(providers! as never);
       setFactoryAddress(factory.contractAddress);
+      setMarketFactoryAddress(factory.contractAddress);
       setMarkets([]);
     } catch (err) {
       setError(explainError(err));
@@ -82,8 +86,11 @@ export const FactoryAdminPage = () => {
             <input
               type="text"
               value={factoryAddress}
-              onChange={(event) => setFactoryAddress(event.target.value)}
-              placeholder="Deploy one, then set VITE_MARKET_FACTORY_ADDRESS"
+              onChange={(event) => {
+                setFactoryAddress(event.target.value);
+                setMarketFactoryAddress(event.target.value);
+              }}
+              placeholder="Deploy one, then paste its address here"
             />
           </label>
           <div className="factory-admin__actions">
@@ -106,8 +113,8 @@ export const FactoryAdminPage = () => {
           </div>
           {factoryAddress && (
             <p className="factory-admin__hint">
-              Set <code>VITE_MARKET_FACTORY_ADDRESS={factoryAddress}</code> for
-              every UI instance, then restart the UI.
+              This browser will use <code>{factoryAddress}</code> for market
+              discovery.
             </p>
           )}
           {markets.length > 0 && (

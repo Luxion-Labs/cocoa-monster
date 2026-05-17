@@ -100,6 +100,7 @@
         name = "cypress";
         runtimeInputs = [pkgs.nodejs pkgs.curl];
         text = ''
+          printf '%s\n' 'window.__COCOA_MONSTER_CONFIG__ = {"VITE_NETWORK_ID":"preview"};' > ui/dist/env.js
           npm --workspace ui run preview &
           PREVIEW_PID=$!
           trap 'kill -TERM "$PREVIEW_PID" 2>/dev/null || true' EXIT
