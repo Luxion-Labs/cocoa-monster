@@ -290,10 +290,14 @@ code {
 
 .market-list__hero {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem 0 0.5rem;
+}
+
+.market-list__hero-copy {
+  min-width: 0;
 }
 
 .market-list__eyebrow {
@@ -318,6 +322,14 @@ code {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex: 0 0 auto;
+}
+
+.market-list__hero-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
   flex: 0 0 auto;
 }
 
@@ -1474,6 +1486,37 @@ code {
   .app__left {
     flex-direction: column;
     gap: 0.6rem;
+  }
+
+  .market-list__hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .market-list__hero h1 {
+    font-size: 36px;
+  }
+
+  .market-list__hero-side {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .market-list__toolbar {
+    grid-template-columns: 1fr;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .market-list__tabs {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .market-list__tab {
+    flex: 0 0 auto;
   }
 }
 
