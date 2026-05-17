@@ -9,10 +9,8 @@
 # from FODs sidesteps the runtime download entirely.
 #
 # Each cocoa.compact circuit's `k` is reported during compile; this
-# list must cover every k the contract uses. After the tNIGHT coin
-# flow landed in buy + redeem, those circuits jumped to k=16 (the
-# Zswap input/output + send/receive primitives bring in the
-# bls_midnight_2p16 parameters). Resolve stays at k=13.
+# list must cover every k the contract uses. The largest current circuit
+# is redeem at k=15, and older/generated artifacts may still require k=16.
 {pkgs}: let
   base = "https://midnight-s3-fileshare-dev-eu-west-1.s3.eu-west-1.amazonaws.com";
 
@@ -28,7 +26,9 @@
 in {
   bls_midnight_2p9 = fetch "bls_midnight_2p9" "sha256-uQCfEJi87//sPEYas6XjoX9+VZnw8Ixw/NxVqJInvL0=";
   bls_midnight_2p10 = fetch "bls_midnight_2p10" "sha256-RrIpCTPL7Uw3iInkupcfGpKIgzH/sJRmrNT/YaHiy0I=";
+  bls_midnight_2p12 = fetch "bls_midnight_2p12" "sha256-7wjrP89i349yxRXP+gJ+aBgItTDLAW7qEEEVVF721cg=";
   bls_midnight_2p13 = fetch "bls_midnight_2p13" "sha256-0zJJEJacTMVBQ7gEW2SeXDpL1ft7j4X+G3cPZAzhyAM=";
   bls_midnight_2p14 = fetch "bls_midnight_2p14" "sha256-/CUwFoheyDDpeAjJ7JILtcq1whr1kDgKbLXrBTjiskQ=";
+  bls_midnight_2p15 = fetch "bls_midnight_2p15" "sha256-ckx8PXeRSLsRPH7pwDSy8n2xbmvfMV/ekBBam60Asd4=";
   bls_midnight_2p16 = fetch "bls_midnight_2p16" "sha256-Cch3IW1libNwJj4Yr0CgMKkBtBp6fDfvWMmQHbQfBcY=";
 }
