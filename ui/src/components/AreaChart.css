@@ -1,0 +1,72 @@
+/* Basic utility classes to mimic Tailwind for Subframe components */
+
+.h-80 {
+  height: 20rem;
+  /* 320px */
+}
+
+.h-40 {
+  height: 10rem;
+  /* 160px */
+}
+
+.w-full {
+  width: 100%;
+}
+
+.text-caption {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.text-caption-bold {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+}
+
+.text-body {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.text-body-bold {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+}
+
+.text-heading-3 {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+}
+
+.text-heading-2 {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+}
+
+.text-heading-1 {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 600;
+}
+
+.text-monospace-body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+/* Hide Recharts Area fills to render clean line strokes only */
+.recharts-area-area {
+  fill: none !important;
+  fill-opacity: 0 !important;
+}
+
+/* Enhance active tooltip focus dots */
+.recharts-active-dot {
+  stroke-width: 2px !important;
+}

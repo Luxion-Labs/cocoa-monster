@@ -99,10 +99,24 @@ export const OptimisticOraclePanel = ({ state, api }: Props) => {
 
   return (
     <div className="oracle-panel" data-testid="optimistic-oracle-panel">
-      <h3>Optimistic oracle</h3>
-      <p>
-        Status: <strong>{statusLabel(oracleStatus)}</strong>
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+        <h3 style={{ margin: 0 }}>Optimistic oracle</h3>
+        <span className={`oracle-status-badge oracle-status-badge--${oracleStatus.toLowerCase()}`}>
+          {oracleStatus === "OPEN" && (
+            <span
+              className="featured-panel__live-dot"
+              style={{
+                background: "var(--success)",
+                boxShadow: "0 0 8px rgba(77, 154, 95, 0.5)",
+                width: "6px",
+                height: "6px",
+                marginRight: "4px"
+              }}
+            />
+          )}
+          {statusLabel(oracleStatus)}
+        </span>
+      </div>
       {state.resolutionSource && (
         <p>
           Source: <strong>{state.resolutionSource}</strong>

@@ -82,7 +82,7 @@ export const BetForm = ({ api, state, wallet }: Props) => {
   return (
     <form onSubmit={submit} className="bet-form" data-testid="bet-form">
       <div className="bet-form__sides">
-        <label className={`bet-form__side ${side === Side.YES ? "bet-form__side--active" : ""}`}>
+        <label className={`bet-form__side bet-form__side--yes ${side === Side.YES ? "bet-form__side--active" : ""}`}>
           <input
             type="radio"
             name="side"
@@ -93,7 +93,7 @@ export const BetForm = ({ api, state, wallet }: Props) => {
           />
           YES {formatPriceYes(state.priceYes)}
         </label>
-        <label className={`bet-form__side ${side === Side.NO ? "bet-form__side--active" : ""}`}>
+        <label className={`bet-form__side bet-form__side--no ${side === Side.NO ? "bet-form__side--active" : ""}`}>
           <input
             type="radio"
             name="side"

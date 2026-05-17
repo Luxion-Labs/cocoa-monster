@@ -23,7 +23,7 @@ export const OracleMarketPage = () => {
   );
   const apiState = useCocoaApi(providers, address ?? null);
   const api = apiState.kind === "ready" ? apiState.api : null;
-  const { state, error: stateError } = useCocoaState(api);
+  const { state, error: stateError } = useCocoaState(api, address ?? null);
   const closeReady = state ? nowSeconds() >= state.closeTime : false;
 
   const closeMarket = async (): Promise<void> => {

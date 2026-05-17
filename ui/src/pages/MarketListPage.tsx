@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { MarketCard } from "../components/MarketCard";
+import { MarketListSkeleton } from "../components/Skeleton";
+import { AreaChart } from "../components/AreaChart";
+import { XAxis, YAxis, CartesianGrid } from "@subframe/core";
+import { formatPriceYes } from "../lib/format";
 import { listKnownMarkets, type KnownMarket } from "../lib/markets";
 import {
   fetchMarketStates,
@@ -130,6 +134,31 @@ export const MarketListPage = () => {
     return matchesCategory && matchesQuery;
   });
 
+  const featuredMarket = useMemo(() => {
+    return filteredMarkets.find((m) => m.status === "OPEN") || filteredMarkets[0] || null;
+  }, [filteredMarkets]);
+
+  const simulatedHistory = useMemo(() => {
+    if (!featuredMarket) return [];
+    const endPrice = Math.round((featuredMarket.priceYes ?? 0.5) * 100);
+    const steps = 6;
+    const now = Date.now();
+    const ticks: { time: string; YES: number; NO: number; }[] = [];
+    const fluctuations = [-6, 3, -4, 5, -2, 0];
+    
+    for (let i = 0; i < steps; i++) {
+      const t = now - (steps - 1 - i) * 60000;
+      const diff = fluctuations[i % fluctuations.length];
+      const yesVal = Math.max(5, Math.min(95, endPrice + diff));
+      ticks.push({
+        time: new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) + `_${t}`,
+        YES: yesVal,
+        NO: 100 - yesVal,
+      });
+    }
+    return ticks;
+  }, [featuredMarket]);
+
   const openCount = markets.filter((m) => m.status === "OPEN").length;
   const totalPositions = markets.reduce(
     (sum, market) => sum + market.positionCount,
@@ -156,6 +185,78 @@ export const MarketListPage = () => {
           </Link>
         </div>
       </header>
+
+      {featuredMarket && (
+        <div className="featured-panel" data-testid="featured-panel">
+          <div className="featured-panel__left">
+            <div className="featured-panel__top">
+              <span className="featured-panel__live-badge">
+                <span className="featured-panel__live-dot" />
+                LIVE
+              </span>
+              <span className="shielded-badge" title="Zero-knowledge private market position">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '3px', verticalAlign: 'middle' }}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                Shielded
+              </span>
+            </div>
+            <Link to={`/m/${featuredMarket.contractAddress}`} className="featured-panel__title">
+              <h2>{featuredMarket.question}</h2>
+            </Link>
+            <div className="featured-panel__bet-pills">
+              <Link to={`/m/${featuredMarket.contractAddress}`} className="btn btn--yes-pill" data-testid="featured-yes-bet">
+                <span>YES</span>
+                <strong>{formatPriceYes(featuredMarket.priceYes)}</strong>
+              </Link>
+              <Link to={`/m/${featuredMarket.contractAddress}`} className="btn btn--no-pill" data-testid="featured-no-bet">
+                <span>NO</span>
+                <strong>{formatPriceYes(1 - featuredMarket.priceYes)}</strong>
+              </Link>
+            </div>
+          </div>
+          <div className="featured-panel__right">
+            <div className="featured-panel__chart-container">
+              {simulatedHistory.length > 0 && (
+                <AreaChart
+                  data={simulatedHistory}
+                  index="time"
+                  categories={["YES", "NO"]}
+                  colors={["#4d9a5f", "#e05252"]}
+                  className="h-40 w-full"
+                  xAxis={
+                    <XAxis
+                      dataKey="time"
+                      tickFormatter={(val) => val.split("_")[0]}
+                      tick={{ fill: "#8e9093", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                  }
+                  yAxis={
+                    <YAxis
+                      domain={[0, 100]}
+                      ticks={[20, 50, 80]}
+                      tickFormatter={(val) => `${val}%`}
+                      tick={{ fill: "#8e9093", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                  }
+                  gridLines={
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="rgba(255,255,255,0.05)"
+                    />
+                  }
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="market-list__toolbar" role="search">
         <input
@@ -205,8 +306,8 @@ export const MarketListPage = () => {
       )}
 
       {isLoading && markets.length === 0 ? (
-        <div className="market-list__loading" data-testid="market-list-loading">
-          <p>Loading markets...</p>
+        <div data-testid="market-list-loading">
+          <MarketListSkeleton />
         </div>
       ) : markets.length === 0 ? (
         <div className="empty-state" data-testid="market-list-empty">

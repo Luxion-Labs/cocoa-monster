@@ -26,7 +26,16 @@ export const MarketCard = ({
     data-testid={`market-card-${market.contractAddress}`}
   >
     <div className="market-card__topline">
-      <span>{category ?? "Market"}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <span>{category ?? "Market"}</span>
+        <span className="shielded-badge" title="Zero-knowledge private market position">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          Shielded
+        </span>
+      </div>
       {status !== undefined && (
         <span
           className={`market-card__status market-card__status--${status.toLowerCase()}`}

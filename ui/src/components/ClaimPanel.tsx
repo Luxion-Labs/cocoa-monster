@@ -121,11 +121,20 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
               className="claim-panel__item"
               data-testid="claim-panel-item"
             >
-              <span>
-                {formatSide(p.side)} · {formatBigInt(p.amount)} NIGHT staked
-                {payout !== null && (
-                  <> · {formatBigInt(payout)} NIGHT payout</>
-                )}
+              <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <span className="shielded-badge" title="Zero-knowledge private market position">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                  Shielded
+                </span>
+                <span>
+                  {formatSide(p.side)} · {formatBigInt(p.amount)} NIGHT staked
+                  {payout !== null && (
+                    <> · {formatBigInt(payout)} NIGHT payout</>
+                  )}
+                </span>
               </span>
               {canClaim ? (
                 <button
