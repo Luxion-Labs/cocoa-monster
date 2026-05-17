@@ -5,6 +5,7 @@ import { Status, type CocoaOptionState } from "cocoa-contract";
 
 import { BetForm } from "../components/BetForm";
 import { ClaimPanel } from "../components/ClaimPanel";
+import { MarketComments } from "../components/MarketComments";
 import { MarketDetailPageSkeleton } from "../components/Skeleton";
 import { AreaChart } from "../components/AreaChart";
 import { OptionLineChart } from "../components/OptionLineChart";
@@ -376,6 +377,8 @@ export const MarketDetailPage = () => {
           <MarketDetailPageSkeleton />
         </div>
       )}
+
+      {address && <MarketComments marketAddress={address} />}
     </section>
   );
 };
