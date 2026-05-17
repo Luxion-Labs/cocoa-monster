@@ -22,8 +22,26 @@ export type CocoaConfig = {
   readonly marketFactoryAddress?: string;
 };
 
+type RuntimeConfig = Partial<Record<keyof ImportMetaEnv, string>>;
+
+declare global {
+  interface Window {
+    __COCOA_MONSTER_CONFIG__?: RuntimeConfig;
+  }
+}
+
+const runtimeConfig = (): RuntimeConfig =>
+  typeof window === "undefined" ? {} : (window.__COCOA_MONSTER_CONFIG__ ?? {});
+
 const fromEnv = (key: string, fallback: string): string =>
-  (import.meta.env?.[key] as string | undefined) ?? fallback;
+  runtimeConfig()[key as keyof ImportMetaEnv] ??
+  (import.meta.env?.[key] as string | undefined) ??
+  fallback;
+
+const optionalFromEnv = (key: string): string | undefined =>
+  runtimeConfig()[key as keyof ImportMetaEnv] ??
+  (import.meta.env?.[key] as string | undefined) ??
+  undefined;
 
 const appOrigin = (): string =>
   typeof window === "undefined" ? "http://localhost:5173" : window.location.origin;
@@ -56,9 +74,7 @@ export const cocoaConfig: CocoaConfig = {
     "VITE_ZK_CONFIG_URI",
     appOrigin(),
   ),
-  marketFactoryAddress:
-    (import.meta.env?.VITE_MARKET_FACTORY_ADDRESS as string | undefined) ||
-    undefined,
+  marketFactoryAddress: optionalFromEnv("VITE_MARKET_FACTORY_ADDRESS"),
 };
 
 let networkConfigured = false;

@@ -1,8 +1,3 @@
-import {
-  CompactTypeBytes,
-  CompactTypeVector,
-  persistentHash,
-} from "@midnight-ntwrk/compact-runtime";
 import { FetchZkConfigProvider } from "@midnight-ntwrk/midnight-js-fetch-zk-config-provider";
 import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
@@ -285,20 +280,3 @@ export const buildCocoaProviders = (lace: LaceConnection): CocoaProviders => {
     },
   };
 };
-
-const oracleDescriptor = new CompactTypeVector(2, new CompactTypeBytes(32));
-
-const padStringTo32 = (s: string): Uint8Array => {
-  const bytes = new TextEncoder().encode(s);
-  if (bytes.length > 32) throw new Error(`prefix "${s}" exceeds 32 bytes`);
-  const buf = new Uint8Array(32);
-  buf.set(bytes, 0);
-  return buf;
-};
-
-/** Mirror of the contract's `oracleCommitment` helper. */
-export const computeOraclePubKey = (oracleSecret: Uint8Array): Uint8Array =>
-  persistentHash(oracleDescriptor, [
-    padStringTo32("cocoa:oracle:"),
-    oracleSecret,
-  ]);

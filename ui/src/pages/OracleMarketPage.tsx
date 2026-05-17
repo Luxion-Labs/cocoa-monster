@@ -109,11 +109,7 @@ export const OracleMarketPage = () => {
             </div>
           )}
           {address && api && state && (
-            <OptimisticOraclePanel
-              contractAddress={address}
-              state={state}
-              api={api}
-            />
+            <OptimisticOraclePanel state={state} api={api} />
           )}
         </div>
       )}

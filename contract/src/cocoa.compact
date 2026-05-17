@@ -7,6 +7,8 @@ export enum Status { OPEN, CLOSED, RESOLVED }
 
 // ----------------- Public market state -----------------
 export ledger question: Opaque<"string">;
+export ledger resolutionRules: Opaque<"string">;
+export ledger resolutionSource: Opaque<"string">;
 export ledger closeTime: Uint<64>;
 
 // Public commitment to the oracle's identity. Whoever knows the
@@ -23,11 +25,18 @@ export ledger reserveNo: Uint<64>;
 // unshielded native NIGHT into this pool before a position is recorded.
 export ledger pool: Uint<64>;
 export ledger volume: Uint<64>;
+export ledger totalYesStake: Uint<64>;
+export ledger totalNoStake: Uint<64>;
 
 // Lifecycle. Markets trade while OPEN, stop accepting buys when CLOSED,
 // and pay winning positions after the oracle moves them to RESOLVED.
 export ledger status: Status;
 export ledger outcome: Side;
+export ledger proposedOutcome: Side;
+export ledger proposedAt: Uint<64>;
+export ledger proposalDeadline: Uint<64>;
+export ledger oracleDisputed: Uint<64>;
+export ledger oracleFinalized: Uint<64>;
 
 // Privacy: anonymous position commitments and one-shot redemption nullifiers.
 export ledger positions: Set<Bytes<32>>;
@@ -35,16 +44,26 @@ export ledger nullifiers: Set<Bytes<32>>;
 
 constructor(
   q: Opaque<"string">,
+  rules: Opaque<"string">,
+  source: Opaque<"string">,
   initialLiquidity: Uint<64>,
   closeTimestamp: Uint<64>,
   oracleId: Bytes<32>,
 ) {
   question = disclose(q);
+  resolutionRules = disclose(rules);
+  resolutionSource = disclose(source);
   reserveYes = disclose(initialLiquidity);
   reserveNo = disclose(initialLiquidity);
   closeTime = disclose(closeTimestamp);
   oraclePubKey = disclose(oracleId);
   status = Status.OPEN;
+  proposedAt = 0;
+  proposalDeadline = 0;
+  oracleDisputed = 0;
+  oracleFinalized = 0;
+  totalYesStake = 0;
+  totalNoStake = 0;
 }
 
 // ----------------- Witnesses (private) -----------------
@@ -79,6 +98,7 @@ export circuit buy(side: Side, amountOut: Uint<64>, stakeAmount: Uint<64>, nowTs
     reserveYes = reserveYes - publicAmount;
     reserveNo = newReserveNo;
     receiveStake(publicStake);
+    totalYesStake = (totalYesStake + publicStake) as Uint<64>;
     const c = disclose(commitment(sk, nonce, publicSide, publicStake));
     positions.insert(c);
     return publicStake;
@@ -90,6 +110,7 @@ export circuit buy(side: Side, amountOut: Uint<64>, stakeAmount: Uint<64>, nowTs
     reserveNo = reserveNo - publicAmount;
     reserveYes = newReserveYes;
     receiveStake(publicStake);
+    totalNoStake = (totalNoStake + publicStake) as Uint<64>;
     const c = disclose(commitment(sk, nonce, publicSide, publicStake));
     positions.insert(c);
     return publicStake;
@@ -105,6 +126,46 @@ export circuit close(nowTs: Uint<64>): [] {
   const publicNow = disclose(nowTs);
   assert(publicNow >= closeTime, "market still open");
   status = Status.CLOSED;
+}
+
+// Optimistic oracle proposal recorded on-chain. Anyone may propose after the
+// market is closed; the dispute window is supplied by the caller and made
+// public through `proposalDeadline`.
+export circuit proposeOutcome(side: Side, nowTs: Uint<64>, disputeWindowSeconds: Uint<64>): [] {
+  assert(status == Status.CLOSED, "market not closed");
+  assert(proposedAt == 0, "outcome already proposed");
+  const publicNow = disclose(nowTs);
+  const publicWindow = disclose(disputeWindowSeconds);
+  assert(publicWindow > 0, "invalid dispute window");
+  proposedOutcome = disclose(side);
+  proposedAt = publicNow;
+  proposalDeadline = (publicNow + publicWindow) as Uint<64>;
+  oracleDisputed = 0;
+  oracleFinalized = 0;
+}
+
+// Dispute the current proposal before its deadline. Arbitration is intentionally
+// not modelled yet; disputed markets cannot be finalized by this circuit.
+export circuit disputeOutcome(nowTs: Uint<64>): [] {
+  assert(status == Status.CLOSED, "market not closed");
+  assert(proposedAt > 0, "no proposed outcome");
+  assert(oracleFinalized == 0, "outcome already finalized");
+  const publicNow = disclose(nowTs);
+  assert(publicNow <= proposalDeadline, "dispute window has ended");
+  oracleDisputed = 1;
+}
+
+// Finalize an undisputed optimistic proposal and resolve the market on-chain.
+export circuit finalizeOutcome(nowTs: Uint<64>): [] {
+  assert(status == Status.CLOSED, "market not closed");
+  assert(proposedAt > 0, "no proposed outcome");
+  assert(oracleDisputed == 0, "market is disputed");
+  assert(oracleFinalized == 0, "outcome already finalized");
+  const publicNow = disclose(nowTs);
+  assert(publicNow >= proposalDeadline, "dispute window is still open");
+  outcome = proposedOutcome;
+  oracleFinalized = 1;
+  status = Status.RESOLVED;
 }
 
 // Trusted oracle resolves the market in a single step. The circuit
@@ -124,12 +185,16 @@ export circuit resolve(side: Side, nowTs: Uint<64>): [] {
 // Privately claim a winning position. The user proves
 // ownership of an existing commitment without revealing their identity
 // (no per-user indexing on chain), then publishes a one-shot nullifier
-// so they can't claim the same position twice. The payout is the stake
-// amount committed in `buy`, capped by the contract-held NIGHT pool.
-export circuit redeem(side: Side, stakeAmount: Uint<64>, recipient: UserAddress): Uint<64> {
+// so they can't claim the same position twice. The payout is the
+// position's pro-rata share of the whole contract pool among winners.
+// Compact circuits do not divide directly, so the caller supplies the
+// floor-divided payout and the circuit verifies it by multiplication:
+//   payout = floor(stake * totalPool / totalWinningStake)
+export circuit redeem(side: Side, stakeAmount: Uint<64>, payoutAmount: Uint<64>, recipient: UserAddress): Uint<64> {
   assert(status == Status.RESOLVED, "market not resolved");
   const publicSide = disclose(side);
   const publicAmount = disclose(stakeAmount);
+  const publicPayout = disclose(payoutAmount);
   assert(outcome == publicSide, "wrong side");
 
   // Verify the caller actually holds this position before publishing
@@ -141,14 +206,21 @@ export circuit redeem(side: Side, stakeAmount: Uint<64>, recipient: UserAddress)
   const n = disclose(nullifier(sk, nonce, publicSide, publicAmount));
   assert(!nullifiers.member(n), "already redeemed");
   nullifiers.insert(n);
-  assert(pool >= publicAmount, "insufficient pool");
-  pool = pool - publicAmount;
+  const winningStake =
+    outcome == Side.YES ? totalYesStake : totalNoStake;
+  assert(winningStake > 0, "no winning stake");
+  const payoutNumerator = publicAmount * volume;
+  assert(publicPayout > 0, "payout is zero");
+  assert(publicPayout * winningStake <= payoutNumerator, "payout too high");
+  assert((publicPayout + 1) * winningStake > payoutNumerator, "payout too low");
+  assert(pool >= publicPayout, "insufficient pool");
+  pool = pool - publicPayout;
   sendUnshielded(
     nativeToken(),
-    publicAmount as Uint<128>,
+    publicPayout as Uint<128>,
     right<ContractAddress, UserAddress>(disclose(recipient)),
   );
-  return publicAmount;
+  return publicPayout;
 }
 
 // ----------------- Helpers -----------------

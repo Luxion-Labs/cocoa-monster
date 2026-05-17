@@ -13,6 +13,10 @@ spec:
     metadata:
       labels:
         {{- include "cocoa-monster.selectorLabels" . | nindent 8 }}
+      {{- if .Values.runtimeConfig.enabled }}
+      annotations:
+        checksum/runtime-config: {{ .Values.runtimeConfig.values | default dict | toJson | sha256sum }}
+      {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -29,6 +33,13 @@ spec:
           {{- with .Values.env }}
           env:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.runtimeConfig.enabled }}
+          volumeMounts:
+            - name: runtime-config
+              mountPath: /usr/share/nginx/html/env.js
+              subPath: env.js
+              readOnly: true
           {{- end }}
           {{- if .Values.probes.liveness.enabled }}
           livenessProbe:
@@ -50,6 +61,12 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.runtimeConfig.enabled }}
+      volumes:
+        - name: runtime-config
+          configMap:
+            name: {{ include "cocoa-monster.fullname" . }}-runtime-config
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

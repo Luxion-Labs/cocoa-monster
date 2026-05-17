@@ -1,0 +1,11 @@
+{{- if .Values.runtimeConfig.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cocoa-monster.fullname" . }}-runtime-config
+  labels:
+    {{- include "cocoa-monster.labels" . | nindent 4 }}
+data:
+  env.js: |
+    window.__COCOA_MONSTER_CONFIG__ = {{ .Values.runtimeConfig.values | default dict | toJson }};
+{{- end }}

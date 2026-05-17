@@ -9,7 +9,6 @@ import { useWallet } from "../hooks/useWallet";
 import { buildCocoaProviders } from "../lib/providers";
 import { rememberMarket } from "../lib/markets";
 import { explainError } from "../lib/errors";
-import { prepareOracle, registerOracleMarket } from "../lib/oracle";
 import { cocoaConfig } from "../lib/network";
 
 const DEFAULT_LIQUIDITY = "1000";
@@ -79,17 +78,12 @@ export const CreateMarketPage = () => {
         initialLiquidity: String(liquidityBig),
         closeTime: String(closeTimestamp),
       });
-      const oracle = await prepareOracle({
-        question: question.trim(),
-        closeTime: closeTimestamp!,
-        resolutionRules: resolutionRules.trim(),
-        resolutionSource: resolutionSource.trim(),
-      });
       const api = await deployCocoaMarket(providers, {
         question: question.trim(),
+        resolutionRules: resolutionRules.trim(),
+        resolutionSource: resolutionSource.trim(),
         initialLiquidity: liquidityBig!,
         closeTime: closeTimestamp!,
-        oraclePubKey: oracle.oraclePubKey,
       });
       console.debug("[cocoa] deployed at", api.contractAddress);
       if (cocoaConfig.marketFactoryAddress) {
@@ -101,17 +95,9 @@ export const CreateMarketPage = () => {
           contractAddress: api.contractAddress,
           question: question.trim(),
           closeTime: closeTimestamp!,
-          oraclePubKey: oracle.oraclePubKey,
+          oraclePubKey: api.oraclePubKey ?? new Uint8Array(32),
         });
       }
-      await registerOracleMarket({
-        oracleId: oracle.oracleId,
-        contractAddress: api.contractAddress,
-        question: question.trim(),
-        closeTime: closeTimestamp!,
-        resolutionRules: resolutionRules.trim(),
-        resolutionSource: resolutionSource.trim(),
-      });
       rememberMarket({
         contractAddress: api.contractAddress,
         question: question.trim(),

@@ -5,6 +5,10 @@ import {
   Side,
   Status,
 } from "cocoa-contract";
+import {
+  MidnightBech32m,
+  UnshieldedAddress,
+} from "@midnight-ntwrk/wallet-sdk-address-format";
 import { useEffect, useState } from "react";
 
 import { formatBigInt, formatSide } from "../lib/format";
@@ -18,6 +22,34 @@ type Props = {
 
 const positionId = (position: CocoaPosition): string =>
   Array.from(position.nonce, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const readUnshieldedAddress = (value: unknown): string => {
+  if (typeof value === "string" && value.trim()) return value;
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof (value as { unshieldedAddress?: unknown }).unshieldedAddress === "string" &&
+    (value as { unshieldedAddress: string }).unshieldedAddress.trim()
+  ) {
+    return (value as { unshieldedAddress: string }).unshieldedAddress;
+  }
+  throw new Error("Wallet did not return an unshielded address.");
+};
+
+const toLedgerUserAddress = (address: string, networkId: string): string => {
+  if (!address.startsWith("mn_")) return address;
+  return MidnightBech32m.parse(address)
+    .decode(UnshieldedAddress, networkId)
+    .hexString;
+};
+
+const payoutFor = (position: CocoaPosition, state: CocoaState): bigint | null => {
+  if (state.status !== Status.RESOLVED || state.outcome !== position.side) return null;
+  const winningStake =
+    state.outcome === Side.YES ? state.totalYesStake : state.totalNoStake;
+  if (winningStake <= 0n) return null;
+  return (position.amount * state.volume) / winningStake;
+};
 
 export const ClaimPanel = ({ api, state, wallet }: Props) => {
   const [positions, setPositions] = useState<readonly CocoaPosition[]>([]);
@@ -47,7 +79,11 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
         throw new Error("Connect wallet to claim payouts.");
       }
       const recipient = await wallet.connected.getUnshieldedAddress();
-      await api.redeem(position, recipient.unshieldedAddress);
+      const recipientAddress = toLedgerUserAddress(
+        readUnshieldedAddress(recipient),
+        wallet.configuration.networkId,
+      );
+      await api.redeem(position, recipientAddress);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -78,6 +114,7 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
             ((winnerSide === Side.YES && p.side === Side.YES) ||
               (winnerSide === Side.NO && p.side === Side.NO));
           const canClaim = state.status === Status.RESOLVED && isWinner;
+          const payout = payoutFor(p, state);
           return (
             <li
               key={id}
@@ -86,6 +123,9 @@ export const ClaimPanel = ({ api, state, wallet }: Props) => {
             >
               <span>
                 {formatSide(p.side)} · {formatBigInt(p.amount)} NIGHT staked
+                {payout !== null && (
+                  <> · {formatBigInt(payout)} NIGHT payout</>
+                )}
               </span>
               {canClaim ? (
                 <button

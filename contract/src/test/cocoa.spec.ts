@@ -19,6 +19,8 @@ describe("Cocoa contract — initial state", () => {
     const ledger = sim.ledger();
 
     expect(ledger.question).toBe("Will it rain tomorrow?");
+    expect(ledger.resolutionRules).toBe("Resolve according to the source.");
+    expect(ledger.resolutionSource).toBe("https://example.com");
     expect(ledger.reserveYes).toBe(1000n);
     expect(ledger.reserveNo).toBe(1000n);
     expect(ledger.closeTime).toBe(1_000n);
@@ -43,6 +45,8 @@ describe("Cocoa contract — buy circuit", () => {
     expect(after.reserveNo).toBe(before.reserveNo + 100n);
     expect(after.pool).toBe(before.pool + 100n);
     expect(after.volume).toBe(before.volume + 100n);
+    expect(after.totalYesStake).toBe(before.totalYesStake + 100n);
+    expect(after.totalNoStake).toBe(before.totalNoStake);
     expect(after.positions.size()).toBe(1n);
     expect(after.nullifiers.isEmpty()).toBe(true);
   });
@@ -56,6 +60,8 @@ describe("Cocoa contract — buy circuit", () => {
     expect(stake).toBe(200n);
     expect(after.reserveYes).toBe(1000n + 200n);
     expect(after.reserveNo).toBe(1000n - quote);
+    expect(after.totalNoStake).toBe(200n);
+    expect(after.totalYesStake).toBe(0n);
     expect(after.positions.size()).toBe(1n);
   });
 
@@ -162,6 +168,41 @@ describe("Cocoa contract — oracle resolution", () => {
     sim.close(1_000n);
     expect(() => sim.buy(Side.YES, 100n, 90n, 1_001n)).toThrow(/market not open/);
   });
+
+  it("records optimistic oracle proposals on-chain", () => {
+    const sim = initial({ closeTime: 1_000n });
+    sim.close(1_000n);
+    sim.proposeOutcome(Side.YES, 1_100n, 300n);
+
+    const l = sim.ledger();
+    expect(l.proposedOutcome).toBe(Side.YES);
+    expect(l.proposedAt).toBe(1_100n);
+    expect(l.proposalDeadline).toBe(1_400n);
+    expect(l.oracleDisputed).toBe(0n);
+  });
+
+  it("finalizes an undisputed optimistic oracle proposal", () => {
+    const sim = initial({ closeTime: 1_000n });
+    sim.close(1_000n);
+    sim.proposeOutcome(Side.NO, 1_100n, 300n);
+    expect(() => sim.finalizeOutcome(1_200n)).toThrow(/dispute window is still open/);
+    sim.finalizeOutcome(1_400n);
+
+    const l = sim.ledger();
+    expect(l.status).toBe(Status.RESOLVED);
+    expect(l.outcome).toBe(Side.NO);
+    expect(l.oracleFinalized).toBe(1n);
+  });
+
+  it("blocks finalization after an optimistic oracle dispute", () => {
+    const sim = initial({ closeTime: 1_000n });
+    sim.close(1_000n);
+    sim.proposeOutcome(Side.YES, 1_100n, 300n);
+    sim.disputeOutcome(1_200n);
+
+    expect(sim.ledger().oracleDisputed).toBe(1n);
+    expect(() => sim.finalizeOutcome(1_400n)).toThrow(/market is disputed/);
+  });
 });
 
 describe("Cocoa contract — redeem circuit", () => {
@@ -190,16 +231,45 @@ describe("Cocoa contract — redeem circuit", () => {
     expect(() => sim.redeem(Side.YES, 999n)).toThrow(/no such position/);
   });
 
-  it("redeems a winning position once and emits a nullifier", () => {
+  it("redeems a winning position for its pro-rata share of the pool", () => {
     const sim = initial({ closeTime: 1_000n });
     const amountOut = sim.buy(Side.YES, 100n, 90n);
+    let l = sim.ledger();
+    sim.buy(Side.NO, 700n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 700n));
     sim.close(1_000n);
     sim.resolve(Side.YES, 1_000n);
 
     const payout = sim.redeem(Side.YES, amountOut);
-    expect(payout).toBe(amountOut);
+    expect(payout).toBe(800n);
     expect(sim.ledger().pool).toBe(0n);
     expect(sim.ledger().nullifiers.size()).toBe(1n);
+  });
+
+  it("splits the pool pro-rata across multiple winners", () => {
+    const sim = initial({ closeTime: 1_000n });
+    const firstYes = sim.buy(Side.YES, 100n, 90n);
+    let l = sim.ledger();
+    const secondYes = sim.buy(Side.YES, 300n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.YES, 300n));
+    l = sim.ledger();
+    sim.buy(Side.NO, 600n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 600n));
+    sim.close(1_000n);
+    sim.resolve(Side.YES, 1_000n);
+
+    expect(sim.redeem(Side.YES, firstYes)).toBe(250n);
+    expect(sim.redeem(Side.YES, secondYes)).toBe(750n);
+    expect(sim.ledger().pool).toBe(0n);
+  });
+
+  it("rejects caller-supplied payouts that are not the exact floor share", () => {
+    const sim = initial({ closeTime: 1_000n });
+    const amountOut = sim.buy(Side.YES, 100n, 90n);
+    let l = sim.ledger();
+    sim.buy(Side.NO, 700n, quoteAmountOut(l.reserveYes, l.reserveNo, Side.NO, 700n));
+    sim.close(1_000n);
+    sim.resolve(Side.YES, 1_000n);
+
+    expect(() => sim.redeem(Side.YES, amountOut, 799n)).toThrow(/payout too low/);
+    expect(() => sim.redeem(Side.YES, amountOut, 801n)).toThrow(/payout too high/);
   });
 
   it("blocks double-redeem via the nullifier set", () => {

@@ -1,22 +1,20 @@
 import { Side, Status, type CocoaApi, type CocoaState } from "cocoa-contract";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { formatSide, formatUnixSeconds } from "../lib/format";
-import {
-  disputeOracleOutcome,
-  fetchOracleMarket,
-  fetchOracleResolution,
-  finalizeOracleOutcome,
-  proposeOracleOutcome,
-  type OracleMarket,
-  type OracleOutcome,
-} from "../lib/oracle";
 
 type Props = {
-  contractAddress: string;
   state: CocoaState;
   api: CocoaApi | null;
 };
+
+type OracleOutcome = "YES" | "NO";
+type OracleStatus =
+  | "OPEN"
+  | "AWAITING_PROPOSAL"
+  | "PROPOSED"
+  | "DISPUTED"
+  | "FINALIZED";
 
 const sideToOutcome = (side: Side | null): OracleOutcome | null =>
   side === Side.YES ? "YES" : side === Side.NO ? "NO" : null;
@@ -24,12 +22,7 @@ const sideToOutcome = (side: Side | null): OracleOutcome | null =>
 const outcomeToSide = (outcome: OracleOutcome): Side =>
   outcome === "YES" ? Side.YES : Side.NO;
 
-const deadlineLabel = (deadline?: number): string =>
-  deadline ? formatUnixSeconds(BigInt(deadline)) : "unknown";
-
-const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
-
-const statusLabel = (status?: OracleMarket["oracleStatus"]): string => {
+const statusLabel = (status: OracleStatus): string => {
   switch (status) {
     case "OPEN":
       return "Betting open";
@@ -41,44 +34,28 @@ const statusLabel = (status?: OracleMarket["oracleStatus"]): string => {
       return "Disputed";
     case "FINALIZED":
       return "Finalized";
-    default:
-      return "Not registered";
   }
 };
 
-export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) => {
-  const [market, setMarket] = useState<OracleMarket | null>(null);
+const contractOracleStatus = (state: CocoaState): OracleStatus => {
+  if (state.status === Status.RESOLVED) return "FINALIZED";
+  if (state.oracleDisputed) return "DISPUTED";
+  if (state.proposedAt > 0n) return "PROPOSED";
+  return state.status === Status.CLOSED ? "AWAITING_PROPOSAL" : "OPEN";
+};
+
+export const OptimisticOraclePanel = ({ state, api }: Props) => {
   const [outcome, setOutcome] = useState<OracleOutcome>("YES");
-  const [evidenceUrl, setEvidenceUrl] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setError(null);
-    try {
-      setMarket(await fetchOracleMarket(contractAddress));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [contractAddress]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   const propose = async (): Promise<void> => {
     setSubmitting("propose");
     setError(null);
     try {
-      setMarket(
-        await proposeOracleOutcome({
-          contractAddress,
-          outcome,
-          evidenceUrl,
-          proposer: "web",
-        }),
-      );
+      if (!api) throw new Error("Connect wallet to propose an outcome.");
+      await api.proposeOutcome(outcomeToSide(outcome), 300n);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -90,13 +67,8 @@ export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) =>
     setSubmitting("dispute");
     setError(null);
     try {
-      setMarket(
-        await disputeOracleOutcome({
-          contractAddress,
-          reason,
-          disputer: "web",
-        }),
-      );
+      if (!api) throw new Error("Connect wallet to dispute the outcome.");
+      await api.disputeOutcome();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -108,7 +80,8 @@ export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) =>
     setSubmitting("finalize");
     setError(null);
     try {
-      setMarket(await finalizeOracleOutcome(contractAddress));
+      if (!api) throw new Error("Connect wallet to finalize the outcome.");
+      await api.finalizeOutcome();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -116,84 +89,41 @@ export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) =>
     }
   };
 
-  const submitFinalizedOnChain = async (): Promise<void> => {
-    setSubmitting("resolve");
-    setError(null);
-    try {
-      if (!api) {
-        throw new Error("Connect wallet to submit the finalized outcome on-chain.");
-      }
-      const resolution = await fetchOracleResolution(contractAddress);
-      if (state.status === Status.OPEN) {
-        await api.close(nowSeconds());
-      }
-      await api.resolveWithOracleSecret(
-        outcomeToSide(resolution.outcome),
-        nowSeconds(),
-        resolution.oracleSecret,
-      );
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSubmitting(null);
-    }
-  };
-
-  const finalizedOutcome =
-    market?.finalOutcome ?? sideToOutcome(state.outcome) ?? undefined;
+  const finalizedOutcome = sideToOutcome(state.outcome) ?? undefined;
+  const proposedOutcome = sideToOutcome(state.proposedOutcome);
+  const oracleStatus = contractOracleStatus(state);
   const canPropose =
-    state.status === Status.CLOSED &&
-    (!market || market.oracleStatus === "AWAITING_PROPOSAL");
-  const canDispute = market?.oracleStatus === "PROPOSED";
-  const canFinalize = market?.oracleStatus === "PROPOSED";
-  const canSubmitFinalized =
-    market?.oracleStatus === "FINALIZED" && state.status !== Status.RESOLVED;
+    state.status === Status.CLOSED && state.proposedAt === 0n;
+  const canDispute = oracleStatus === "PROPOSED";
+  const canFinalize = oracleStatus === "PROPOSED";
 
   return (
     <div className="oracle-panel" data-testid="optimistic-oracle-panel">
       <h3>Optimistic oracle</h3>
       <p>
-        Status: <strong>{statusLabel(market?.oracleStatus)}</strong>
+        Status: <strong>{statusLabel(oracleStatus)}</strong>
       </p>
-      {market?.closeTime && (
+      {state.resolutionSource && (
         <p>
-          Betting deadline:{" "}
-          <strong>{formatUnixSeconds(BigInt(market.closeTime))}</strong>
+          Source: <strong>{state.resolutionSource}</strong>
         </p>
       )}
-      {market?.resolutionSource && (
-        <p>
-          Source: <strong>{market.resolutionSource}</strong>
-        </p>
-      )}
-      {market?.resolutionRules && (
+      {state.resolutionRules && (
         <div className="oracle-panel__rules">
           <strong>Resolution rules</strong>
-          <p>{market.resolutionRules}</p>
+          <p>{state.resolutionRules}</p>
         </div>
       )}
-      {market?.proposerBond && (
+      {proposedOutcome && state.proposalDeadline > 0n && (
         <p>
-          Proposal bond: <strong>{market.proposerBond}</strong>
-          {market.disputerBond ? (
-            <>
-              {"; "}
-              Dispute bond: <strong>{market.disputerBond}</strong>
-            </>
-          ) : null}
+          Proposed <strong>{proposedOutcome}</strong>. Dispute window
+          ends <strong>{formatUnixSeconds(state.proposalDeadline)}</strong>.
         </p>
       )}
-      {market?.proposedOutcome && (
+      {oracleStatus === "DISPUTED" && (
         <p>
-          Proposed <strong>{market.proposedOutcome}</strong>. Dispute window
-          ends <strong>{deadlineLabel(market.proposalDeadline)}</strong>.
-        </p>
-      )}
-      {market?.oracleStatus === "DISPUTED" && (
-        <p>
-          Disputed by {market.disputer ?? "anonymous"}:{" "}
-          {market.disputeReason || "no reason supplied"}
+          Disputed on-chain.
+          {reason ? <> Reason: {reason}</> : null}
         </p>
       )}
       {finalizedOutcome && (
@@ -220,12 +150,6 @@ export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) =>
               {formatSide(Side.NO)}
             </button>
           </div>
-          <input
-            type="url"
-            value={evidenceUrl}
-            onChange={(event) => setEvidenceUrl(event.target.value)}
-            placeholder="Evidence URL"
-          />
           <button
             type="button"
             className="btn btn--primary"
@@ -263,21 +187,6 @@ export const OptimisticOraclePanel = ({ contractAddress, state, api }: Props) =>
           disabled={submitting !== null}
         >
           {submitting === "finalize" ? "Finalizing..." : "Finalize after window"}
-        </button>
-      )}
-
-      {canSubmitFinalized && (
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => void submitFinalizedOnChain()}
-          disabled={submitting !== null || !api}
-        >
-          {submitting === "resolve"
-            ? "Submitting..."
-            : api
-              ? "Submit outcome on-chain"
-              : "Connect wallet to submit"}
         </button>
       )}
 

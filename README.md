@@ -6,7 +6,7 @@ Bet on real-world events — elections, crypto prices, sports — on **Midnight*
 
 - **Pricing.** Each market is a constant-product market maker (CPMM): `reserveYes * reserveNo = k`. Buying YES burns YES reserve and grows NO reserve in proportion to the stake units entered; price floats accordingly, and a live chart can be derived from on-chain reserve deltas.
 - **Privacy.** Positions are committed on-chain as `H(secret, nonce, side, amount)`. Identity, side, and size are hidden; redemption reveals only a one-shot nullifier.
-- **Resolution.** Markets close on-chain after `closeTime`, then an optimistic oracle flow proposes, disputes, and finalizes the outcome before the trusted resolver submits the final answer.
+- **Resolution.** Markets close on-chain after `closeTime`, then a contract-backed optimistic oracle flow proposes, disputes, and finalizes the outcome.
 
 Sweet name, sharp odds.
 
@@ -38,8 +38,7 @@ The UI is served at `http://localhost:5173`.
 - Open `/oracle` to deploy or inspect the shared `MarketFactory`.
 - After deploying a factory, set `VITE_MARKET_FACTORY_ADDRESS=<factory-address>` for every UI instance and restart `just dev`.
 - The home page reads that factory first, so every teammate sees the same markets.
-- Oracle proposal, dispute, finalization, and on-chain outcome submission are handled from `/oracle/<market-address>`.
-- The oracle API is served by the `oracle` process and proxied through the UI at `/oracle-api`.
+- Oracle proposal, dispute, and finalization are contract operations handled from `/oracle/<market-address>`.
 
 ## License
 

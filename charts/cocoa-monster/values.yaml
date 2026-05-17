@@ -35,11 +35,18 @@ ingress:
   host: ""
   annotations: {}
 
-# Extra envs forwarded to the nginx container — the static bundle is
-# already baked at build time, so these are mostly diagnostic
-# (e.g. RUNTIME_ENV) rather than feature-flag style. For real config
-# the bundle should re-fetch a /env.json at boot from a separate
-# ConfigMap mount.
+# Runtime browser config rendered as /env.js. Vite also supports these
+# as build-time variables for local/dev builds, but Kubernetes deploys
+# serve a prebuilt static bundle, so chart-controlled values must be
+# loaded by the browser at runtime.
+runtimeConfig:
+  enabled: true
+  values:
+    VITE_MARKET_FACTORY_ADDRESS: 858870881ea82b9637342fcd87a7b921237fd6d7f29d85825edfa8544ffadcd9
+
+# Extra envs forwarded to the nginx container. These are process envs
+# only; they are not visible to the already-built Vite bundle unless
+# also represented under `runtimeConfig.values`.
 env: []
 
 resources: {}

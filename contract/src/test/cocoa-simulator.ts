@@ -18,6 +18,7 @@ import {
   Status,
 } from "../managed/cocoa/contract/index.js";
 import {
+  type CocoaPosition,
   type CocoaPrivateState,
   createCocoaPrivateState,
   witnesses,
@@ -79,6 +80,7 @@ export class CocoaSimulator {
   readonly oracleSecret: Uint8Array;
   readonly oraclePubKey: Uint8Array;
   readonly coinPublicKey: string;
+  private ownedPositions: CocoaPosition[] = [];
 
   constructor(opts: CocoaSimulatorOptions) {
     this.contract = new Contract<CocoaPrivateState>(witnesses);
@@ -97,6 +99,8 @@ export class CocoaSimulator {
     const initial = this.contract.initialState(
       createConstructorContext(initialPrivateState, this.coinPublicKey),
       opts.question,
+      "Resolve according to the source.",
+      "https://example.com",
       opts.initialLiquidity,
       opts.closeTime,
       this.oraclePubKey,
@@ -132,11 +136,12 @@ export class CocoaSimulator {
     amountOut: bigint,
     nowTs = this.ledger().closeTime - 1n,
   ): bigint {
+    const positionNonce = randomBytes32();
     this.circuitContext = {
       ...this.circuitContext,
       currentPrivateState: {
         ...this.circuitContext.currentPrivateState,
-        positionNonce: randomBytes32(),
+        positionNonce,
       },
     };
     const result = this.contract.circuits.buy(
@@ -147,11 +152,38 @@ export class CocoaSimulator {
       nowTs,
     );
     this.circuitContext = result.context;
+    this.ownedPositions.push({ side, amount: result.result, nonce: positionNonce });
     return result.result;
   }
 
   close(nowTs: bigint): void {
     const result = this.contract.circuits.close(this.circuitContext, nowTs);
+    this.circuitContext = result.context;
+  }
+
+  proposeOutcome(side: Side, nowTs: bigint, disputeWindowSeconds: bigint): void {
+    const result = this.contract.circuits.proposeOutcome(
+      this.circuitContext,
+      side,
+      nowTs,
+      disputeWindowSeconds,
+    );
+    this.circuitContext = result.context;
+  }
+
+  disputeOutcome(nowTs: bigint): void {
+    const result = this.contract.circuits.disputeOutcome(
+      this.circuitContext,
+      nowTs,
+    );
+    this.circuitContext = result.context;
+  }
+
+  finalizeOutcome(nowTs: bigint): void {
+    const result = this.contract.circuits.finalizeOutcome(
+      this.circuitContext,
+      nowTs,
+    );
     this.circuitContext = result.context;
   }
 
@@ -164,14 +196,31 @@ export class CocoaSimulator {
     this.circuitContext = result.context;
   }
 
-  redeem(side: Side, amountOut: bigint): bigint {
+  redeem(side: Side, amountOut: bigint, payout?: bigint): bigint {
+    const l = this.ledger();
+    const winningStake = l.outcome === Side.YES ? l.totalYesStake : l.totalNoStake;
+    const payoutAmount = payout ?? (winningStake > 0n ? (amountOut * l.volume) / winningStake : 1n);
+    const position = this.ownedPositions.find(
+      (p) => p.side === side && p.amount === amountOut,
+    );
+    if (position) {
+      this.circuitContext = {
+        ...this.circuitContext,
+        currentPrivateState: {
+          ...this.circuitContext.currentPrivateState,
+          positionNonce: position.nonce,
+        },
+      };
+    }
     const result = this.contract.circuits.redeem(
       this.circuitContext,
       side,
       amountOut,
+      payoutAmount,
       { bytes: encodeUserAddress(sampleUserAddress()) },
     );
     this.circuitContext = result.context;
+    this.ownedPositions = this.ownedPositions.filter((p) => p !== position);
     return result.result;
   }
 }

@@ -20,6 +20,7 @@ import {
   Contract,
   ledger as readLedger,
   Side,
+  Status,
   type Witnesses,
 } from "./managed/cocoa/contract/index.js";
 import { decodeCocoaState, type CocoaState } from "./quote.js";
@@ -31,7 +32,14 @@ import {
 } from "./witnesses.js";
 
 export type CocoaContract = Contract<CocoaPrivateState, Witnesses<CocoaPrivateState>>;
-export type CocoaCircuitId = "buy" | "close" | "resolve" | "redeem";
+export type CocoaCircuitId =
+  | "buy"
+  | "close"
+  | "proposeOutcome"
+  | "disputeOutcome"
+  | "finalizeOutcome"
+  | "resolve"
+  | "redeem";
 export type CocoaProviders = ContractProviders<CocoaContract, CocoaCircuitId, CocoaPrivateState>;
 export type CocoaDeployed = DeployedContract<CocoaContract>;
 export type CocoaFound = FoundContract<CocoaContract>;
@@ -67,6 +75,28 @@ const randomBytes32 = (): Uint8Array => {
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
   a.length === b.length && a.every((byte, i) => byte === b[i]);
 
+const redeemPayout = (
+  position: CocoaPosition,
+  ledger: ReturnType<typeof readLedger>,
+): bigint => {
+  if (ledger.status !== Status.RESOLVED) {
+    throw new Error("market not resolved");
+  }
+  if (ledger.outcome !== position.side) {
+    throw new Error("wrong side");
+  }
+  const winningStake =
+    ledger.outcome === Side.YES ? ledger.totalYesStake : ledger.totalNoStake;
+  if (winningStake <= 0n) {
+    throw new Error("no winning stake");
+  }
+  const payout = (position.amount * ledger.volume) / winningStake;
+  if (payout <= 0n) {
+    throw new Error("payout is zero");
+  }
+  return payout;
+};
+
 const nowSeconds = (): bigint => BigInt(Math.floor(Date.now() / 1000));
 
 /**
@@ -85,6 +115,8 @@ export const compiledCocoaContract = pipe(
 
 export type DeployCocoaMarketOptions = {
   question: string;
+  resolutionRules: string;
+  resolutionSource?: string;
   initialLiquidity: bigint;
   closeTime: bigint;
   /**
@@ -126,7 +158,13 @@ export const deployCocoaMarket = async (
   console.debug("[cocoa-contract] deployContract input", {
     compiledContract: compiledCocoaContract,
     privateStateId: COCOA_PRIVATE_STATE_ID,
-    args: [opts.question, String(opts.initialLiquidity), String(opts.closeTime)],
+    args: [
+      opts.question,
+      opts.resolutionRules,
+      opts.resolutionSource ?? "",
+      String(opts.initialLiquidity),
+      String(opts.closeTime),
+    ],
   });
   const deployed = await deployContract<CocoaContract>(providers, {
     compiledContract: compiledCocoaContract as never,
@@ -134,6 +172,8 @@ export const deployCocoaMarket = async (
     initialPrivateState,
     args: [
       opts.question,
+      opts.resolutionRules,
+      opts.resolutionSource ?? "",
       opts.initialLiquidity,
       opts.closeTime,
       oraclePubKey,
@@ -141,7 +181,7 @@ export const deployCocoaMarket = async (
   });
   // eslint-disable-next-line no-console
   console.debug("[cocoa-contract] deployContract returned", deployed);
-  return new CocoaApi(providers, deployed);
+  return new CocoaApi(providers, deployed, oraclePubKey);
 };
 
 export const joinCocoaMarket = async (
@@ -183,6 +223,7 @@ export class CocoaApi {
   constructor(
     readonly providers: CocoaProviders,
     readonly deployed: CocoaFound,
+    readonly oraclePubKey?: Uint8Array,
   ) {
     this.contractAddress = deployed.deployTxData.public.contractAddress;
     this.state$ = providers.publicDataProvider
@@ -213,6 +254,26 @@ export class CocoaApi {
     await this.deployed.callTx.close(nowTs);
   }
 
+  async proposeOutcome(
+    side: Side,
+    disputeWindowSeconds: bigint,
+    nowTs: bigint = nowSeconds(),
+  ): Promise<void> {
+    await this.deployed.callTx.proposeOutcome(
+      side,
+      nowTs,
+      disputeWindowSeconds,
+    );
+  }
+
+  async disputeOutcome(nowTs: bigint = nowSeconds()): Promise<void> {
+    await this.deployed.callTx.disputeOutcome(nowTs);
+  }
+
+  async finalizeOutcome(nowTs: bigint = nowSeconds()): Promise<void> {
+    await this.deployed.callTx.finalizeOutcome(nowTs);
+  }
+
   async resolve(side: Side, nowTs: bigint): Promise<void> {
     await this.deployed.callTx.resolve(side, nowTs);
   }
@@ -240,10 +301,18 @@ export class CocoaApi {
   }
 
   async redeem(position: CocoaPosition, recipient: UserAddress): Promise<bigint> {
+    const state = await this.providers.publicDataProvider.queryContractState(
+      this.contractAddress as never,
+    );
+    if (!state) {
+      throw new Error("contract state not found");
+    }
+    const payout = redeemPayout(position, readLedger(state.data));
     await this.rotateNonce(position.nonce);
     const result = await this.deployed.callTx.redeem(
       position.side,
       position.amount,
+      payout,
       { bytes: encodeUserAddress(recipient) },
     );
     await this.markPositionRedeemed(position);

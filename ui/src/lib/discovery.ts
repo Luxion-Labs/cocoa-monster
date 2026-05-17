@@ -11,6 +11,7 @@ import {
   readMarketFactoryLedger,
 } from "cocoa-contract";
 import type { KnownMarket } from "./markets";
+import { readJsonResponse } from "./http";
 import { cocoaConfig } from "./network";
 
 const getProvider = () => 
@@ -44,8 +45,11 @@ export const fetchRegistryMarkets = async (): Promise<KnownMarket[]> => {
     throw new Error(`registry returned ${response.status}`);
   }
 
-  const payload = await response.json();
-  const rows = Array.isArray(payload) ? payload : payload?.markets;
+  const payload = await readJsonResponse<{ markets?: unknown } | unknown[]>(
+    response,
+    {},
+  );
+  const rows = Array.isArray(payload) ? payload : payload.markets;
   if (!Array.isArray(rows)) return [];
 
   const now = Date.now();
