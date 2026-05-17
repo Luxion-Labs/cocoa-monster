@@ -8,6 +8,15 @@ midnight-level-db/
 oracle/data/
 ui/dist/
 ui/.vite/
+
+# Compact / Midnight generated artifacts
+**/managed/
+**/zkir/
+*.zkir
+*.bzkir
+*.prover
+*.verifier
+
 ui/public/keys/
 ui/public/zkir/
 contract/dist/

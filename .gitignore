@@ -13,7 +13,7 @@ dist/
 *.prover
 *.verifier
 
-# UI's copy of the compiled ZK artifacts (synced from contract/src/managed/)
+# UI copies of compiled ZK artifacts
 ui/public/keys/
 ui/public/zkir/
 
