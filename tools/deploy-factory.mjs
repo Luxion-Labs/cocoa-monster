@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { inspect } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
@@ -91,6 +92,17 @@ const withTimeout = async (promise, label, timeoutMs) => {
     clearTimeout(timeout);
   }
 };
+
+const summarizeWalletState = (state) =>
+  inspect(
+    {
+      isSynced: state.isSynced,
+      shielded: state.shielded.state.progress,
+      unshielded: state.unshielded.progress,
+      dust: state.dust.state.progress,
+    },
+    { breakLength: Infinity, depth: 4 },
+  );
 
 const requiredEnv = (key) => {
   const value = process.env[key];
@@ -228,11 +240,19 @@ const buildWalletFacade = async ({
       "COCOA_FACTORY_SYNC_TIMEOUT_MS",
     );
     log(`waiting for wallet sync, timeout ${Math.round(syncTimeoutMs / 1000)}s`);
+    let lastProgressLogAt = 0;
+    const progressSubscription = facade.state().subscribe((state) => {
+      const now = Date.now();
+      if (now - lastProgressLogAt >= 30_000 || state.isSynced) {
+        lastProgressLogAt = now;
+        log(`wallet sync progress ${summarizeWalletState(state)}`);
+      }
+    });
     const synced = await withTimeout(
       facade.waitForSyncedState(),
       "wallet sync",
       syncTimeoutMs,
-    );
+    ).finally(() => progressSubscription.unsubscribe());
     log(`wallet synced for account ${synced.shielded.address}`);
     const zkConfigProvider = new FileZkConfigProvider(
       path.join(repoRoot, "contract/src/managed/factory"),
