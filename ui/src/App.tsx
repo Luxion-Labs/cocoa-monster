@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from "react-router-dom";
 
 import { WalletConnect } from "./components/WalletConnect";
+import { MistBackground } from "./components/MistBackground";
 import { useWallet } from "./hooks/useWallet";
 import { CreateMarketPage } from "./pages/CreateMarketPage";
 import { FactoryAdminPage } from "./pages/FactoryAdminPage";
@@ -13,6 +14,7 @@ const App = () => {
 
   return (
     <div className="app">
+      <MistBackground />
       <header className="app__bar">
         <div className="app__left">
           <Link to="/" className="app__brand">
