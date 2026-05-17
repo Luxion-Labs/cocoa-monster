@@ -60,6 +60,38 @@ class FileZkConfigProvider extends ZKConfigProvider {
 
 const env = (key, fallback) => process.env[key] ?? fallback;
 
+const log = (message) => {
+  process.stderr.write(`${new Date().toISOString()} ${message}\n`);
+};
+
+const parsePositiveInt = (value, label) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive integer`);
+  }
+  return parsed;
+};
+
+const withTimeout = async (promise, label, timeoutMs) => {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`),
+            ),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 const requiredEnv = (key) => {
   const value = process.env[key];
   if (!value) throw new Error(`${key} is required`);
@@ -171,6 +203,7 @@ const buildWalletFacade = async ({
     ),
   };
   const keyStore = createKeystore(keys.nightKey, networkId);
+  log("initializing wallet facade");
   const facade = await WalletFacade.init({
     configuration,
     shielded: (config) =>
@@ -183,9 +216,23 @@ const buildWalletFacade = async ({
         LedgerParameters.initialParameters().dust,
       ),
   });
+  log("wallet facade initialized");
 
+  log("starting wallet facade");
   await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey);
-  const synced = await facade.waitForSyncedState();
+  log("wallet facade started");
+
+  const syncTimeoutMs = parsePositiveInt(
+    env("COCOA_FACTORY_SYNC_TIMEOUT_MS", "300000"),
+    "COCOA_FACTORY_SYNC_TIMEOUT_MS",
+  );
+  log(`waiting for wallet sync, timeout ${Math.round(syncTimeoutMs / 1000)}s`);
+  const synced = await withTimeout(
+    facade.waitForSyncedState(),
+    "wallet sync",
+    syncTimeoutMs,
+  );
+  log(`wallet synced for account ${synced.shielded.address}`);
   const zkConfigProvider = new FileZkConfigProvider(
     path.join(repoRoot, "contract/src/managed/factory"),
   );
@@ -280,7 +327,7 @@ const main = async () => {
   }
 
   setNetworkId(networkId);
-  process.stderr.write(`deploying cocoa factory for ${environment} on ${networkId}\n`);
+  log(`deploying cocoa factory for ${environment} on ${networkId}`);
 
   const keys = deriveKeys(resolveSeedBytes(), accountIndex);
   const { facade, providers, accountId } = await buildWalletFacade({
@@ -295,7 +342,17 @@ const main = async () => {
   });
 
   try {
-    const factory = await deployMarketFactory(providers);
+    const deployTimeoutMs = parsePositiveInt(
+      env("COCOA_FACTORY_DEPLOY_TIMEOUT_MS", "900000"),
+      "COCOA_FACTORY_DEPLOY_TIMEOUT_MS",
+    );
+    log(`submitting factory deployment, timeout ${Math.round(deployTimeoutMs / 1000)}s`);
+    const factory = await withTimeout(
+      deployMarketFactory(providers),
+      "factory deployment",
+      deployTimeoutMs,
+    );
+    log(`factory deployed at ${factory.contractAddress}`);
     const deployedState = {
       environment,
       networkId,
